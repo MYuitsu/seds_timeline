@@ -99,10 +99,38 @@ mod wasm_ui {
         events: Vec<&'a TimelineEvent>,
     }
 
-    struct MeasurementPoint<'a> {
-        event: &'a TimelineEvent,
-        value: f64,
+    #[derive(Clone, Copy)]
+    enum ChartMode {
+        TimelinePerDay,
+        SummaryByDay,
+    }
+
+    struct MeasurementChartData<'a> {
         unit: Option<String>,
+        series: Vec<MeasurementSeries<'a>>,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    }
+
+    struct MeasurementSeries<'a> {
+        label: String,
+        points: Vec<SeriesPoint<'a>>,
+    }
+
+    struct SeriesPoint<'a> {
+        timestamp: DateTime<Utc>,
+        value: f64,
+        _marker: std::marker::PhantomData<&'a TimelineEvent>,
+    }
+
+    struct ParsedMeasurement {
+        unit: Option<String>,
+        values: Vec<NamedValue>,
+    }
+
+    struct NamedValue {
+        label: String,
+        value: f64,
     }
 
     #[derive(Clone, Copy, PartialEq)]
@@ -247,13 +275,6 @@ mod wasm_ui {
                 </section>
             </div>
         }
-    }
-
-    #[derive(Debug, Clone)]
-    struct Sparkline {
-        path: String,
-        last_x: f64,
-        last_y: f64,
     }
 
     fn tally_severity(events: &[&TimelineEvent]) -> SeverityCounts {
@@ -613,13 +634,23 @@ mod wasm_ui {
 
     fn render_trend_item(trend: &VitalTrend) -> Html {
         let numeric_values: Vec<f64> = trend.points.iter().filter_map(|p| p.value).collect();
-        let sparkline = build_sparkline(&numeric_values, 160.0, 40.0);
+        let chart_data = trend_to_chart_data(trend);
+        let chart_html = chart_data
+            .as_ref()
+            .map(|data| build_measurement_chart(data, Severity::Info, ChartMode::SummaryByDay))
+            .unwrap_or_else(|| html! { <div class="trend-fallback">{"Not enough data to render a chart."}</div> });
+
         let latest_label = trend
             .points
-            .last()
-            .and_then(|p| p.label.clone())
+            .iter()
+            .rev()
+            .find_map(|p| p.label.clone())
             .unwrap_or_else(|| "--".to_string());
-        let relative = format_relative_time(trend.points.last().and_then(|p| p.recorded_at));
+        let relative = trend
+            .points
+            .iter()
+            .rev()
+            .find_map(|p| format_relative_time(p.recorded_at));
         let delta_text = numeric_delta_display(&numeric_values, trend.unit.as_deref());
         let delta_state = if numeric_values.len() >= 2 {
             let first = numeric_values.first().copied().unwrap_or(0.0);
@@ -645,18 +676,7 @@ mod wasm_ui {
                     }
                 </div>
                 <div class="trend-content">
-                    {
-                        if let Some(spark) = sparkline {
-                            html! {
-                                <svg class="trend-chart" viewBox="0 0 160 40" preserveAspectRatio="none" role="img" aria-label={format!("Trend for {0}", trend.name)}>
-                                    <path d={spark.path.clone()} />
-                                    <circle cx={format!("{:.2}", spark.last_x)} cy={format!("{:.2}", spark.last_y)} r="2.5" />
-                                </svg>
-                            }
-                        } else {
-                            html! { <div class="trend-fallback">{"Not enough data to render a chart."}</div> }
-                        }
-                    }
+                    { chart_html }
                     <div class="trend-meta">
                         <span class="trend-latest">{ latest_label }</span>
                         {
@@ -671,42 +691,39 @@ mod wasm_ui {
         }
     }
 
-    fn build_sparkline(values: &[f64], width: f64, height: f64) -> Option<Sparkline> {
-        if values.len() < 2 {
+    fn trend_to_chart_data(trend: &VitalTrend) -> Option<MeasurementChartData<'static>> {
+        let mut points: Vec<SeriesPoint<'static>> = trend
+            .points
+            .iter()
+            .filter_map(|point| {
+                let timestamp = point.recorded_at?;
+                let value = point.value?;
+                Some(SeriesPoint {
+                    timestamp,
+                    value,
+                    _marker: std::marker::PhantomData,
+                })
+            })
+            .collect();
+
+        if points.len() < 2 {
             return None;
         }
 
-        let min = values
-            .iter()
-            .fold(f64::INFINITY, |acc, value| acc.min(*value));
-        let max = values
-            .iter()
-            .fold(f64::NEG_INFINITY, |acc, value| acc.max(*value));
-        let span = (max - min).abs();
-        let range = if span < f64::EPSILON { 1.0 } else { span };
-        let step = width / (values.len() as f64 - 1.0);
+        points.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+        let start = points.first()?.timestamp;
+        let end = points.last()?.timestamp;
 
-        let mut path = String::with_capacity(values.len() * 12);
-        let mut last_x = 0.0;
-        let mut last_y = height / 2.0;
+        let series = MeasurementSeries {
+            label: trend.name.clone(),
+            points,
+        };
 
-        for (idx, value) in values.iter().enumerate() {
-            let x = step * idx as f64;
-            let normalized = (*value - min) / range;
-            let y = height - (normalized * height);
-            if idx == 0 {
-                path.push_str(&format!("M{:.2},{:.2}", x, y));
-            } else {
-                path.push_str(&format!(" L{:.2},{:.2}", x, y));
-            }
-            last_x = x;
-            last_y = y;
-        }
-
-        Some(Sparkline {
-            path,
-            last_x,
-            last_y,
+        Some(MeasurementChartData {
+            unit: trend.unit.clone(),
+            series: vec![series],
+            start,
+            end,
         })
     }
 
@@ -1121,17 +1138,15 @@ mod wasm_ui {
 
         let range_label = format_time_range(earliest, latest);
         let relative_label = format_relative_time(latest);
-
-        let measurements: Vec<MeasurementPoint<'_>> = group
-            .events
-            .iter()
-            .filter_map(|event| extract_measurement(event))
-            .collect();
-
-        let chart_markup = render_group_chart(&measurements, earliest, latest);
-        let has_chart = chart_markup.is_some();
-        let details_markup = render_group_details(group.events.as_slice(), has_chart);
-        let chart_html = chart_markup.unwrap_or_else(Html::default);
+        let chart_data = collect_measurement_series(group.events.as_slice());
+        let (chart_html, has_chart) = if let Some(data) = chart_data.as_ref() {
+            (
+                render_measurement_panel(data, severity, ChartMode::TimelinePerDay),
+                true,
+            )
+        } else {
+            (Html::default(), false)
+        };
 
         let mut meta: Vec<Html> = Vec::new();
 
@@ -1172,161 +1187,585 @@ mod wasm_ui {
                     }
                 }
                 { chart_html }
-                { details_markup }
-            </div>
-        }
-    }
-
-    fn render_group_details(events: &[&TimelineEvent], collapsible: bool) -> Html {
-        if events.is_empty() {
-            return Html::default();
-        }
-
-        if collapsible {
-            html! {
-                <details class="timeline-group-details">
-                    <summary>{"View entries"}</summary>
-                    <ul class="timeline-cell-list">
-                        { for events.iter().map(|event| render_event(*event)) }
-                    </ul>
-                </details>
-            }
-        } else {
-            html! {
-                <ul class="timeline-cell-list">
-                    { for events.iter().map(|event| render_event(*event)) }
-                </ul>
-            }
-        }
-    }
-
-    fn render_group_chart(
-        measurements: &[MeasurementPoint<'_>],
-        earliest: Option<DateTime<Utc>>,
-        latest: Option<DateTime<Utc>>,
-    ) -> Option<Html> {
-        if measurements.len() < 2 {
-            return None;
-        }
-
-        let values_desc: Vec<f64> = measurements.iter().map(|point| point.value).collect();
-        if values_desc.is_empty() {
-            return None;
-        }
-
-        if values_desc.iter().any(|value| !value.is_finite()) {
-            return None;
-        }
-
-        let mut values_asc = values_desc.clone();
-        values_asc.reverse();
-
-        let Some(sparkline) = build_sparkline(&values_asc, 240.0, 60.0) else {
-            return None;
-        };
-
-        let unit_hint = measurements
-            .iter()
-            .find_map(|point| point.unit.as_deref());
-
-        let latest_point = &measurements[0];
-        let latest_label = format_measurement(latest_point.value, unit_hint);
-
-        let min_value = values_desc
-            .iter()
-            .fold(f64::INFINITY, |acc, value| acc.min(*value));
-        let max_value = values_desc
-            .iter()
-            .fold(f64::NEG_INFINITY, |acc, value| acc.max(*value));
-
-        if !min_value.is_finite() || !max_value.is_finite() {
-            return None;
-        }
-
-        let min_label = format_measurement(min_value, unit_hint);
-        let max_label = format_measurement(max_value, unit_hint);
-
-        let start_label = earliest.map(format_clock_time);
-        let end_label = latest.map(format_clock_time);
-
-        Some(html! {
-            <div class="timeline-group-chart">
-                <div class="timeline-group-stats">
-                    <span class="timeline-group-stat" data-kind="latest">{ format!("Latest {latest_label}") }</span>
-                    <span class="timeline-group-stat" data-kind="high">{ format!("High {max_label}") }</span>
-                    <span class="timeline-group-stat" data-kind="low">{ format!("Low {min_label}") }</span>
-                </div>
-                <svg
-                    class="timeline-group-chart-plot"
-                    viewBox="0 0 240 60"
-                    preserveAspectRatio="none"
-                    role="img"
-                    aria-label={format!("Trend for {}", latest_point.event.title)}
-                >
-                    <path d={sparkline.path.clone()} />
-                    <circle cx={format!("{:.2}", sparkline.last_x)} cy={format!("{:.2}", sparkline.last_y)} r="2.5" />
-                </svg>
                 {
-                    if start_label.is_some() || end_label.is_some() {
+                    if has_chart {
+                        let summary_label = if count == 1 {
+                            "View entry".to_string()
+                        } else {
+                            format!("View {count} entries")
+                        };
+
                         html! {
-                            <div class="timeline-group-axis">
-                                <span>{ start_label.unwrap_or_else(|| "--:--".to_string()) }</span>
-                                <span>{ end_label.unwrap_or_else(|| "--:--".to_string()) }</span>
-                            </div>
+                            <details class="timeline-group-details">
+                                <summary>{ summary_label }</summary>
+                                <ul class="timeline-cell-list">
+                                    { for group.events.iter().map(|event| render_event(*event)) }
+                                </ul>
+                            </details>
                         }
                     } else {
-                        Html::default()
+                        html! {
+                            <ul class="timeline-cell-list">
+                                { for group.events.iter().map(|event| render_event(*event)) }
+                            </ul>
+                        }
                     }
                 }
             </div>
-        })
+        }
     }
+        fn collect_measurement_series<'a>(
+            events: &[&'a TimelineEvent],
+        ) -> Option<MeasurementChartData<'a>> {
+            let mut series_map: BTreeMap<String, Vec<SeriesPoint<'a>>> = BTreeMap::new();
+            let mut unit: Option<String> = None;
+            let mut start: Option<DateTime<Utc>> = None;
+            let mut end: Option<DateTime<Utc>> = None;
 
-    fn extract_measurement(event: &TimelineEvent) -> Option<MeasurementPoint<'_>> {
-        let detail = event.detail.as_ref()?;
-        let (value, unit) = parse_measurement_detail(detail)?;
-        Some(MeasurementPoint {
-            event,
-            value,
-            unit,
-        })
-    }
+            for event in events {
+                let detail = match event.detail.as_ref() {
+                    Some(detail) => detail,
+                    None => continue,
+                };
 
-    fn parse_measurement_detail(detail: &str) -> Option<(f64, Option<String>)> {
-        let mut chars = detail.chars().peekable();
+                let timestamp = match event.occurred_at {
+                    Some(timestamp) => timestamp,
+                    None => continue,
+                };
 
-        while let Some(&ch) = chars.peek() {
-            if ch.is_ascii_digit() || ch == '.' || ch == '-' {
-                break;
+                let parsed = parse_measurement_values(&event.title, detail);
+                let Some(parsed) = parsed else { continue };
+
+                if start.map_or(true, |current| timestamp < current) {
+                    start = Some(timestamp);
+                }
+                if end.map_or(true, |current| timestamp > current) {
+                    end = Some(timestamp);
+                }
+
+                if unit.is_none() {
+                    unit = parsed.unit.clone();
+                }
+
+                for value in parsed.values {
+                    series_map
+                        .entry(value.label.clone())
+                        .or_default()
+                        .push(SeriesPoint {
+                            timestamp,
+                            value: value.value,
+                            _marker: std::marker::PhantomData,
+                        });
+                }
             }
-            chars.next();
+
+            if series_map.is_empty() {
+                return None;
+            }
+
+            let start = start?;
+            let end = end?;
+
+            let mut series: Vec<MeasurementSeries<'a>> = series_map
+                .into_iter()
+                .map(|(label, mut points)| {
+                    points.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+                    MeasurementSeries { label, points }
+                })
+                .collect();
+
+            series.sort_by(|a, b| match (a.label.as_str(), b.label.as_str()) {
+                ("Systolic", "Diastolic") => std::cmp::Ordering::Less,
+                ("Diastolic", "Systolic") => std::cmp::Ordering::Greater,
+                _ => a.label.cmp(&b.label),
+            });
+
+            let total_points: usize = series.iter().map(|series| series.points.len()).sum();
+            if total_points < 2 {
+                return None;
+            }
+
+            Some(MeasurementChartData { unit, series, start, end })
         }
 
-        let mut number = String::new();
+        fn parse_measurement_values(title: &str, detail: &str) -> Option<ParsedMeasurement> {
+            let trimmed = detail.trim();
+            if trimmed.is_empty() {
+                return None;
+            }
 
-        while let Some(&ch) = chars.peek() {
-            if ch.is_ascii_digit() || ch == '.' || (ch == '-' && number.is_empty()) {
-                number.push(ch);
-                chars.next();
+            let lower_title = title.to_lowercase();
+
+            if lower_title.contains("blood pressure") && trimmed.contains('/') {
+                let mut parts = trimmed.splitn(2, '/');
+                let systolic_part = parts.next()?.trim();
+                let diastolic_part = parts.next()?.trim();
+
+                let (systolic_value, _) = parse_value_and_unit(systolic_part)?;
+                let (diastolic_value, unit) = parse_value_and_unit(diastolic_part)?;
+
+                return Some(ParsedMeasurement {
+                    unit,
+                    values: vec![
+                        NamedValue {
+                            label: "Systolic".to_string(),
+                            value: systolic_value,
+                        },
+                        NamedValue {
+                            label: "Diastolic".to_string(),
+                            value: diastolic_value,
+                        },
+                    ],
+                });
+            }
+
+            let (value, unit) = parse_value_and_unit(trimmed)?;
+            let label = if lower_title.is_empty() {
+                "Measurement".to_string()
             } else {
-                break;
+                title.to_string()
+            };
+
+            Some(ParsedMeasurement {
+                unit,
+                values: vec![NamedValue { label, value }],
+            })
+        }
+
+        fn parse_value_and_unit(segment: &str) -> Option<(f64, Option<String>)> {
+            let mut chars = segment.chars().peekable();
+
+            while let Some(&ch) = chars.peek() {
+                if ch.is_ascii_digit() || ch == '.' || ch == '-' {
+                    break;
+                }
+                chars.next();
+            }
+
+            let mut number = String::new();
+
+            while let Some(&ch) = chars.peek() {
+                if ch.is_ascii_digit() || ch == '.' || (ch == '-' && number.is_empty()) {
+                    number.push(ch);
+                    chars.next();
+                } else {
+                    break;
+                }
+            }
+
+            if number.is_empty() {
+                return None;
+            }
+
+            let value = number.parse::<f64>().ok()?;
+            let remainder: String = chars.collect();
+            let unit = remainder.trim();
+            let unit = if unit.is_empty() {
+                None
+            } else {
+                Some(unit.to_string())
+            };
+
+            Some((value, unit))
+        }
+
+    fn render_measurement_panel(
+        data: &MeasurementChartData<'_>,
+        severity: Severity,
+        mode: ChartMode,
+    ) -> Html {
+        let severity_level = severity_level(severity);
+        let chart = build_measurement_chart(data, severity, mode);
+        let unit_hint = data.unit.as_deref();
+
+        let stats = data
+            .series
+            .iter()
+            .map(|series| render_series_stats(series, unit_hint))
+            .collect::<Vec<_>>();
+
+        html! {
+            <div class="timeline-group-chart" data-severity={severity_level}>
+                <div class="timeline-group-stats" data-series-count={data.series.len().to_string()}>
+                    { for stats }
+                </div>
+                { chart }
+            </div>
+        }
+    }
+
+    fn build_measurement_chart(
+        data: &MeasurementChartData<'_>,
+        severity: Severity,
+        mode: ChartMode,
+    ) -> Html {
+        const VIEW_WIDTH: f64 = 260.0;
+        const VIEW_HEIGHT: f64 = 120.0;
+        const LEFT_PAD: f64 = 52.0;
+        const RIGHT_PAD: f64 = 16.0;
+        const TOP_PAD: f64 = 14.0;
+        const BOTTOM_PAD: f64 = 34.0;
+
+        let plot_width = VIEW_WIDTH - LEFT_PAD - RIGHT_PAD;
+        let plot_height = VIEW_HEIGHT - TOP_PAD - BOTTOM_PAD;
+        let severity_class = format!("is-{}", severity_level(severity));
+
+        let mut min_value = f64::INFINITY;
+        let mut max_value = f64::NEG_INFINITY;
+        for series in &data.series {
+            for point in &series.points {
+                min_value = min_value.min(point.value);
+                max_value = max_value.max(point.value);
             }
         }
 
-        if number.is_empty() {
-            return None;
+        if !min_value.is_finite() || !max_value.is_finite() {
+            return Html::default();
         }
 
-        let value = number.parse::<f64>().ok()?;
-        let remainder: String = chars.collect();
-        let unit = remainder.trim();
-        let unit = if unit.is_empty() {
-            None
-        } else {
-            Some(unit.to_string())
+        if (max_value - min_value).abs() < f64::EPSILON {
+            let padding = (max_value.abs().max(1.0)) * 0.05;
+            min_value -= padding;
+            max_value += padding;
+        }
+
+        let span = (max_value - min_value).abs();
+        let padding = if span < 5.0 { 1.0 } else { span * 0.1 };
+        let axis_min = min_value - padding;
+        let axis_max = max_value + padding;
+        let axis_range = (axis_max - axis_min).max(1e-3);
+
+        let duration = data.end.signed_duration_since(data.start);
+        let mut total_seconds = duration.num_seconds() as f64;
+        if total_seconds.abs() < 60.0 {
+            total_seconds = 60.0;
+        }
+
+        let mut path_elements: Vec<Html> = Vec::new();
+        let mut point_elements: Vec<Html> = Vec::new();
+
+        for (index, series) in data.series.iter().enumerate() {
+            let mut path = String::new();
+            let mut first_point = true;
+
+            for point in &series.points {
+                let offset = point
+                    .timestamp
+                    .signed_duration_since(data.start)
+                    .num_seconds() as f64;
+                let ratio_x = (offset / total_seconds).clamp(0.0, 1.0);
+                let x = LEFT_PAD + ratio_x * plot_width;
+
+                let ratio_y = ((point.value - axis_min) / axis_range).clamp(0.0, 1.0);
+                let y = TOP_PAD + (1.0 - ratio_y) * plot_height;
+
+                if first_point {
+                    path.push_str(&format!("M{:.2},{:.2}", x, y));
+                    first_point = false;
+                } else {
+                    path.push_str(&format!(" L{:.2},{:.2}", x, y));
+                }
+
+                let point_class = classes!(
+                    "timeline-chart-point",
+                    severity_class.clone(),
+                    (index > 0).then_some("is-secondary")
+                );
+
+                let tooltip_time = match mode {
+                    ChartMode::TimelinePerDay => format_clock_time(point.timestamp),
+                    ChartMode::SummaryByDay => point.timestamp.format("%m/%d %H:%M").to_string(),
+                };
+
+                let tooltip_value = format_measurement(point.value, data.unit.as_deref());
+
+                point_elements.push(html! {
+                    <circle
+                        class={point_class.clone()}
+                        cx={format!("{:.2}", x)}
+                        cy={format!("{:.2}", y)}
+                        r="3"
+                    >
+                        <title>{ format!("{tooltip_time} – {tooltip_value}") }</title>
+                    </circle>
+                });
+            }
+
+            if !path.is_empty() {
+                let line_class = classes!(
+                    "timeline-chart-line",
+                    severity_class.clone(),
+                    (index > 0).then_some("is-secondary")
+                );
+
+                path_elements.push(html! {
+                    <path class={line_class} d={path.clone()} />
+                });
+            }
+        }
+
+        let y_ticks = build_value_ticks(axis_min, axis_max, data.unit.as_deref());
+        let x_ticks = build_time_ticks(data, mode, total_seconds);
+
+        let grid_lines: Vec<Html> = y_ticks
+            .iter()
+            .map(|(value, label)| {
+                let ratio = ((value - axis_min) / axis_range).clamp(0.0, 1.0);
+                let y = TOP_PAD + (1.0 - ratio) * plot_height;
+                html! {
+                    <g class="timeline-chart-grid-row">
+                        <line
+                            x1={format!("{:.2}", LEFT_PAD)}
+                            y1={format!("{:.2}", y)}
+                            x2={format!("{:.2}", LEFT_PAD + plot_width)}
+                            y2={format!("{:.2}", y)}
+                        />
+                        <text
+                            x={format!("{:.2}", LEFT_PAD - 8.0)}
+                            y={format!("{:.2}", y + 4.0)}
+                            class="timeline-chart-tick"
+                        >
+                            { label.clone() }
+                        </text>
+                    </g>
+                }
+            })
+            .collect();
+
+        let column_lines: Vec<Html> = x_ticks
+            .iter()
+            .map(|(ratio, label)| {
+                let x = LEFT_PAD + ratio * plot_width;
+                html! {
+                    <g class="timeline-chart-grid-col">
+                        <line
+                            x1={format!("{:.2}", x)}
+                            y1={format!("{:.2}", TOP_PAD)}
+                            x2={format!("{:.2}", x)}
+                            y2={format!("{:.2}", TOP_PAD + plot_height)}
+                        />
+                        <text
+                            x={format!("{:.2}", x)}
+                            y={format!("{:.2}", TOP_PAD + plot_height + 16.0)}
+                            class="timeline-chart-tick"
+                        >
+                            { label.clone() }
+                        </text>
+                    </g>
+                }
+            })
+            .collect();
+
+        let mode_label = match mode {
+            ChartMode::TimelinePerDay => "timeline",
+            ChartMode::SummaryByDay => "summary",
         };
 
-        Some((value, unit))
+        html! {
+            <div class="timeline-group-plot" data-mode={mode_label}>
+                <svg
+                    viewBox={format!("0 0 {:.0} {:.0}", VIEW_WIDTH, VIEW_HEIGHT)}
+                    class="timeline-group-chart-plot"
+                    role="img"
+                    aria-hidden="true"
+                >
+                    <rect
+                        class="timeline-chart-surface"
+                        x={format!("{:.2}", LEFT_PAD)}
+                        y={format!("{:.2}", TOP_PAD)}
+                        width={format!("{:.2}", plot_width)}
+                        height={format!("{:.2}", plot_height)}
+                        rx="6"
+                        ry="6"
+                    />
+                    { for grid_lines }
+                    { for column_lines }
+                    <line
+                        class="timeline-chart-axis-line"
+                        x1={format!("{:.2}", LEFT_PAD)}
+                        y1={format!("{:.2}", TOP_PAD + plot_height)}
+                        x2={format!("{:.2}", LEFT_PAD + plot_width)}
+                        y2={format!("{:.2}", TOP_PAD + plot_height)}
+                    />
+                    <line
+                        class="timeline-chart-axis-line"
+                        x1={format!("{:.2}", LEFT_PAD)}
+                        y1={format!("{:.2}", TOP_PAD)}
+                        x2={format!("{:.2}", LEFT_PAD)}
+                        y2={format!("{:.2}", TOP_PAD + plot_height)}
+                    />
+                    { for path_elements }
+                    { for point_elements }
+                </svg>
+            </div>
+        }
+    }
+
+    fn build_value_ticks(min: f64, max: f64, unit: Option<&str>) -> Vec<(f64, String)> {
+        if !min.is_finite() || !max.is_finite() {
+            return Vec::new();
+        }
+
+        let mut values = Vec::new();
+        let mut push_value = |value: f64| {
+            if values
+                .iter()
+                .all(|existing: &f64| (existing - value).abs() > 0.05)
+            {
+                values.push(value);
+            }
+        };
+
+        push_value(min);
+        push_value((min + max) / 2.0);
+        push_value(max);
+
+        values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        values
+            .into_iter()
+            .map(|value| (value, format_axis_value(value, unit)))
+            .collect()
+    }
+
+    fn build_time_ticks(
+        data: &MeasurementChartData<'_>,
+        mode: ChartMode,
+        total_seconds: f64,
+    ) -> Vec<(f64, String)> {
+        match mode {
+            ChartMode::TimelinePerDay => build_hour_ticks(data, total_seconds),
+            ChartMode::SummaryByDay => build_day_ticks(data, total_seconds),
+        }
+    }
+
+    fn build_hour_ticks(
+        data: &MeasurementChartData<'_>,
+        total_seconds: f64,
+    ) -> Vec<(f64, String)> {
+        let mut times: Vec<DateTime<Utc>> = data
+            .series
+            .iter()
+            .flat_map(|series| series.points.iter().map(|point| point.timestamp))
+            .collect();
+
+        times.sort();
+        times.dedup();
+
+        if times.is_empty() {
+            times.push(data.start);
+            times.push(data.end);
+        } else {
+            if *times.first().unwrap() != data.start {
+                times.insert(0, data.start);
+            }
+            if *times.last().unwrap() != data.end {
+                times.push(data.end);
+            }
+        }
+
+        if times.len() > 5 {
+            let mid = data.start + Duration::seconds((total_seconds / 2.0).round() as i64);
+            times = vec![data.start, mid, data.end];
+        }
+
+        times
+            .into_iter()
+            .map(|timestamp| {
+                let offset = timestamp
+                    .signed_duration_since(data.start)
+                    .num_seconds() as f64;
+                let ratio = (offset / total_seconds).clamp(0.0, 1.0);
+                (ratio, format_clock_time(timestamp))
+            })
+            .collect()
+    }
+
+    fn build_day_ticks(
+        data: &MeasurementChartData<'_>,
+        total_seconds: f64,
+    ) -> Vec<(f64, String)> {
+        let mut days: BTreeMap<NaiveDate, DateTime<Utc>> = BTreeMap::new();
+
+        for series in &data.series {
+            for point in &series.points {
+                days.entry(point.timestamp.date_naive())
+                    .or_insert(point.timestamp);
+            }
+        }
+
+        if days.is_empty() {
+            days.insert(data.start.date_naive(), data.start);
+            days.insert(data.end.date_naive(), data.end);
+        }
+
+        let mut ticks: Vec<(f64, String)> = Vec::new();
+
+        for timestamp in days.values() {
+            let offset = timestamp
+                .signed_duration_since(data.start)
+                .num_seconds() as f64;
+            let ratio = (offset / total_seconds).clamp(0.0, 1.0);
+            ticks.push((ratio, timestamp.format("%m/%d").to_string()));
+        }
+
+        ticks
+    }
+
+    fn render_series_stats(series: &MeasurementSeries<'_>, unit: Option<&str>) -> Html {
+        if series.points.is_empty() {
+            return Html::default();
+        }
+
+        let latest = series.points.last().unwrap();
+        let first = series.points.first().unwrap();
+
+        let mut min_value = f64::INFINITY;
+        let mut max_value = f64::NEG_INFINITY;
+
+        for point in &series.points {
+            min_value = min_value.min(point.value);
+            max_value = max_value.max(point.value);
+        }
+
+        let latest_label = format_measurement(latest.value, unit);
+        let min_label = format_measurement(min_value, unit);
+        let max_label = format_measurement(max_value, unit);
+        let (delta_label, delta_trend) = format_delta_display(latest.value - first.value, unit);
+
+        html! {
+            <div class="timeline-group-stat-block">
+                <div class="stat-header">
+                    <span class="stat-label">{ series.label.clone() }</span>
+                    <span class="stat-value">{ latest_label }</span>
+                </div>
+                <div class="stat-meta">
+                    <span class="stat-delta" data-trend={delta_trend}>{ delta_label }</span>
+                    <span class="stat-range">{ format!("Low {min_label} • High {max_label}") }</span>
+                </div>
+            </div>
+        }
+    }
+
+    fn format_axis_value(value: f64, unit: Option<&str>) -> String {
+        let numeric = format_numeric(value);
+        match unit {
+            Some(unit) if !unit.is_empty() => format!("{numeric} {unit}"),
+            _ => numeric,
+        }
+    }
+
+    fn format_delta_display(delta: f64, unit: Option<&str>) -> (String, &'static str) {
+        let threshold = 0.1;
+        if delta.abs() < threshold {
+            return ("Δ 0".to_string(), "steady");
+        }
+
+        let arrow = if delta > 0.0 { "↑" } else { "↓" };
+        let magnitude = format_numeric(delta.abs());
+        let unit_suffix = unit.map(|u| format!(" {u}")).unwrap_or_default();
+        let label = format!("{arrow}{magnitude}{unit_suffix}");
+        let trend = if delta > 0.0 { "up" } else { "down" };
+        (label, trend)
     }
 
     fn bucket_slug(bucket: &str) -> &'static str {
