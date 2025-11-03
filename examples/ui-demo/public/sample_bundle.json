@@ -175,6 +175,48 @@
     {
       "resource": {
         "resourceType": "Observation",
+        "id": "obs-hr-1210",
+        "code": {
+          "text": "Heart rate"
+        },
+        "valueQuantity": {
+          "value": 122,
+          "unit": "bpm"
+        },
+        "effectiveDateTime": "2025-10-30T12:10:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-hr-1145",
+        "code": {
+          "text": "Heart rate"
+        },
+        "valueQuantity": {
+          "value": 118,
+          "unit": "bpm"
+        },
+        "effectiveDateTime": "2025-10-30T11:45:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-hr-1110",
+        "code": {
+          "text": "Heart rate"
+        },
+        "valueQuantity": {
+          "value": 110,
+          "unit": "bpm"
+        },
+        "effectiveDateTime": "2025-10-30T11:10:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
         "id": "obs-spo2",
         "code": {
           "text": "SpO2"
@@ -184,6 +226,34 @@
           "unit": "%"
         },
         "effectiveDateTime": "2025-10-30T12:18:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-spo2-1205",
+        "code": {
+          "text": "SpO2"
+        },
+        "valueQuantity": {
+          "value": 88,
+          "unit": "%"
+        },
+        "effectiveDateTime": "2025-10-30T12:05:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-spo2-1142",
+        "code": {
+          "text": "SpO2"
+        },
+        "valueQuantity": {
+          "value": 91,
+          "unit": "%"
+        },
+        "effectiveDateTime": "2025-10-30T11:42:00Z"
       }
     },
     {
@@ -219,6 +289,66 @@
     {
       "resource": {
         "resourceType": "Observation",
+        "id": "obs-bp-1200",
+        "code": {
+          "text": "Blood pressure"
+        },
+        "effectiveDateTime": "2025-10-30T12:00:00Z",
+        "component": [
+          {
+            "code": {
+              "text": "Systolic blood pressure"
+            },
+            "valueQuantity": {
+              "value": 84,
+              "unit": "mmHg"
+            }
+          },
+          {
+            "code": {
+              "text": "Diastolic blood pressure"
+            },
+            "valueQuantity": {
+              "value": 48,
+              "unit": "mmHg"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-bp-1135",
+        "code": {
+          "text": "Blood pressure"
+        },
+        "effectiveDateTime": "2025-10-30T11:35:00Z",
+        "component": [
+          {
+            "code": {
+              "text": "Systolic blood pressure"
+            },
+            "valueQuantity": {
+              "value": 90,
+              "unit": "mmHg"
+            }
+          },
+          {
+            "code": {
+              "text": "Diastolic blood pressure"
+            },
+            "valueQuantity": {
+              "value": 52,
+              "unit": "mmHg"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
         "id": "obs-resp",
         "code": {
           "text": "Respiratory rate"
@@ -228,6 +358,20 @@
           "unit": "breaths/min"
         },
         "effectiveDateTime": "2025-10-30T12:10:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-resp-1140",
+        "code": {
+          "text": "Respiratory rate"
+        },
+        "valueQuantity": {
+          "value": 28,
+          "unit": "breaths/min"
+        },
+        "effectiveDateTime": "2025-10-30T11:40:00Z"
       }
     },
     {
@@ -247,6 +391,20 @@
     {
       "resource": {
         "resourceType": "Observation",
+        "id": "obs-temp-1130",
+        "code": {
+          "text": "Temperature"
+        },
+        "valueQuantity": {
+          "value": 38.3,
+          "unit": "C"
+        },
+        "effectiveDateTime": "2025-10-30T11:30:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
         "id": "obs-lactate",
         "code": {
           "text": "Lactate"
@@ -256,6 +414,20 @@
           "unit": "mmol/L"
         },
         "effectiveDateTime": "2025-10-30T11:50:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-lactate-1045",
+        "code": {
+          "text": "Lactate"
+        },
+        "valueQuantity": {
+          "value": 3.6,
+          "unit": "mmol/L"
+        },
+        "effectiveDateTime": "2025-10-30T10:45:00Z"
       }
     },
     {

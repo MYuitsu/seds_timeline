@@ -256,6 +256,66 @@ pub const DEFAULT_STYLES: &str = r#"
   gap: 12px;
 }
 
+.insights-card {
+  padding-top: 18px;
+}
+
+.insight-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.insight-item {
+  border: 1px solid var(--timeline-trend-border);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--timeline-surface);
+  font-size: 0.9rem;
+  color: var(--timeline-muted-strong);
+}
+
+.insight-item[data-trend="up"] .insight-change {
+  color: var(--timeline-severity-high);
+}
+
+.insight-item[data-trend="down"] .insight-change {
+  color: var(--timeline-severity-critical);
+}
+
+.insight-title {
+  font-weight: 600;
+  color: var(--timeline-heading);
+}
+
+.insight-change {
+  margin: 0;
+}
+
+.insight-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 0.78rem;
+  color: var(--timeline-muted);
+}
+
+.insight-range::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--timeline-group-accent);
+  margin-right: 6px;
+}
+
 .trend-item {
   border: 1px solid var(--timeline-trend-border);
   border-radius: 12px;

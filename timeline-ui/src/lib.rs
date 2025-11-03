@@ -106,6 +106,7 @@ mod wasm_ui {
                     { render_critical_card("High-risk chronic conditions", &snapshot.critical.chronic_conditions, "No high-risk chronic conditions recorded.") }
                     { render_vitals(&snapshot.critical.recent_vitals) }
                     { render_vital_trends(&snapshot.critical) }
+                    { render_trend_insights(&snapshot.critical) }
                 </aside>
                 <section class="timeline-column" aria-live="polite">
                     { render_hot_strip(&snapshot.events) }
@@ -263,6 +264,93 @@ mod wasm_ui {
         }
     }
 
+    fn render_trend_insights(summary: &CriticalSummary) -> Html {
+        let mut items: Vec<Html> = Vec::new();
+
+        for trend in &summary.vital_trends {
+            let numeric_points: Vec<_> = trend
+                .points
+                .iter()
+                .filter_map(|point| point.value.map(|value| (point, value)))
+                .collect();
+
+            if numeric_points.len() < 2 {
+                continue;
+            }
+
+            let (first_point, first_value) = numeric_points.first().copied().unwrap();
+            let (last_point, last_value) = numeric_points.last().copied().unwrap();
+            let delta = last_value - first_value;
+
+            if delta.abs() < 0.5 {
+                continue;
+            }
+
+            let direction = if delta > 0.0 { "up" } else { "down" };
+            let verb = if delta > 0.0 {
+                "Increased"
+            } else {
+                "Decreased"
+            };
+
+            let unit_suffix = trend.unit.as_deref().unwrap_or("");
+            let change_value = format_numeric(delta.abs());
+            let change_text = if unit_suffix.is_empty() {
+                format!("{verb} by {change_value}")
+            } else {
+                format!("{verb} by {change_value} {unit_suffix}")
+            };
+
+            let start_label = first_point
+                .label
+                .clone()
+                .unwrap_or_else(|| format_measurement(first_value, trend.unit.as_deref()));
+            let end_label = last_point
+                .label
+                .clone()
+                .unwrap_or_else(|| format_measurement(last_value, trend.unit.as_deref()));
+            let detail_text = format!("{start_label} -> {end_label}");
+
+            let range_text = format_time_range(first_point.recorded_at, last_point.recorded_at);
+            let relative_text = format_relative_time(last_point.recorded_at);
+
+            items.push(html! {
+                <li class="insight-item" data-trend={direction}>
+                    <div class="insight-title">{ trend.name.clone() }</div>
+                    <div class="insight-change">{ change_text }{": "}{ detail_text }</div>
+                    <div class="insight-meta">
+                        {
+                            range_text
+                                .map(|text| html! { <span class="insight-range">{ text }</span> })
+                                .unwrap_or_default()
+                        }
+                        {
+                            relative_text
+                                .map(|text| html! { <span class="insight-relative">{ text }</span> })
+                                .unwrap_or_default()
+                        }
+                    </div>
+                </li>
+            });
+        }
+
+        if items.is_empty() {
+            Html::default()
+        } else {
+            html! {
+                <section class="critical-card insights-card">
+                    <header>
+                        <h3>{"Trend insights"}</h3>
+                        <span class="critical-count">{ items.len() }</span>
+                    </header>
+                    <ul class="insight-list">
+                        { for items }
+                    </ul>
+                </section>
+            }
+        }
+    }
+
     fn render_trend_item(trend: &VitalTrend) -> Html {
         let numeric_values: Vec<f64> = trend.points.iter().filter_map(|p| p.value).collect();
         let sparkline = build_sparkline(&numeric_values, 160.0, 40.0);
@@ -378,6 +466,40 @@ mod wasm_ui {
 
         let unit_suffix = unit.map(|u| format!(" {u}")).unwrap_or_default();
         Some(format!("Δ {formatted}{unit_suffix}"))
+    }
+
+    fn format_time_range(
+        start: Option<DateTime<Utc>>,
+        end: Option<DateTime<Utc>>,
+    ) -> Option<String> {
+        match (start, end) {
+            (Some(start), Some(end)) => Some(format!(
+                "{} -> {}",
+                format_clock_time(start),
+                format_clock_time(end)
+            )),
+            _ => None,
+        }
+    }
+
+    fn format_clock_time(timestamp: DateTime<Utc>) -> String {
+        timestamp.format("%H:%M").to_string()
+    }
+
+    fn format_numeric(value: f64) -> String {
+        if value.abs() >= 10.0 {
+            format!("{value:.0}")
+        } else {
+            format!("{value:.1}")
+        }
+    }
+
+    fn format_measurement(value: f64, unit: Option<&str>) -> String {
+        let numeric = format_numeric(value);
+        match unit {
+            Some(unit) if !unit.is_empty() => format!("{numeric} {unit}"),
+            _ => numeric,
+        }
     }
 
     fn render_critical_item(item: &CriticalItem) -> Html {
