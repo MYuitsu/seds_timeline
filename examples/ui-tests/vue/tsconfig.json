@@ -1,0 +1,8 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["vitest/importMeta", "vitest/globals"],
+    "jsx": "preserve"
+  },
+  "include": ["src", "tests", "../types.d.ts"]
+}

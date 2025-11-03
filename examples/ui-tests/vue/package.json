@@ -1,0 +1,15 @@
+{
+  "name": "@seds-timeline/vue-ui-test",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "@vue/test-utils": "^2.4.3",
+    "jsdom": "^24.0.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.1.0",
+    "vue": "^3.4.0"
+  }
+}

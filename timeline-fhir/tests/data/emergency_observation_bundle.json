@@ -1,0 +1,45 @@
+{
+  "resourceType": "Bundle",
+  "type": "collection",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "Patient",
+        "id": "patient-123",
+        "name": [
+          {
+            "given": ["Jane"],
+            "family": "Doe"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-1",
+        "status": "final",
+        "code": {
+          "text": "Heart rate"
+        },
+        "valueQuantity": {
+          "value": 118,
+          "unit": "bpm"
+        },
+        "issued": "2025-10-30T14:25:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-2",
+        "status": "final",
+        "code": {
+          "text": "Blood pressure"
+        },
+        "valueString": "160/95 mmHg",
+        "issued": "2025-10-30T13:45:00Z"
+      }
+    }
+  ]
+}

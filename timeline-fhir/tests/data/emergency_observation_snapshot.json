@@ -1,0 +1,45 @@
+{
+  "generated_at": "__DYNAMIC_TIMESTAMP__",
+  "critical": {
+    "allergies": [],
+    "medications": [],
+    "chronic_conditions": [],
+    "code_status": null,
+    "alerts": [
+      {
+        "label": "Bệnh nhân: Jane Doe",
+        "detail": null,
+        "severity": "info"
+      }
+    ],
+    "recent_vitals": []
+  },
+  "events": [
+    {
+      "id": "obs-1",
+      "category": "Observation",
+      "title": "Heart rate",
+      "detail": "118 bpm",
+      "occurred_at": "2025-10-30T14:25:00Z",
+      "severity": "info",
+      "source": {
+        "system": "FHIR",
+        "reference": "obs-1",
+        "display": null
+      }
+    },
+    {
+      "id": "obs-2",
+      "category": "Observation",
+      "title": "Blood pressure",
+      "detail": "160/95 mmHg",
+      "occurred_at": "2025-10-30T13:45:00Z",
+      "severity": "info",
+      "source": {
+        "system": "FHIR",
+        "reference": "obs-2",
+        "display": null
+      }
+    }
+  ]
+}

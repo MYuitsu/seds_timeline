@@ -1,0 +1,124 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TimelineSnapshot",
+  "type": "object",
+  "required": ["generated_at", "critical", "events"],
+  "properties": {
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Thời điểm (UTC) snapshot được sinh ra."
+    },
+    "critical": {
+      "$ref": "#/definitions/CriticalSummary"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/TimelineEvent"
+      }
+    }
+  },
+  "definitions": {
+    "Severity": {
+      "type": "string",
+      "enum": ["critical", "high", "moderate", "low", "info"]
+    },
+    "EventCategory": {
+      "type": "string",
+      "enum": [
+        "Encounter",
+        "Procedure",
+        "Condition",
+        "Medication",
+        "Observation",
+        "Document",
+        "Note",
+        "Other"
+      ]
+    },
+    "CriticalItem": {
+      "type": "object",
+      "required": ["label", "severity"],
+      "properties": {
+        "label": { "type": "string" },
+        "detail": { "type": ["string", "null"] },
+        "severity": { "$ref": "#/definitions/Severity" }
+      }
+    },
+    "VitalSnapshot": {
+      "type": "object",
+      "required": ["name", "value"],
+      "properties": {
+        "name": { "type": "string" },
+        "value": { "type": "string" },
+        "recorded_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        }
+      }
+    },
+    "ResourceReference": {
+      "type": "object",
+      "properties": {
+        "system": { "type": ["string", "null"] },
+        "reference": { "type": ["string", "null"] },
+        "display": { "type": ["string", "null"] }
+      }
+    },
+    "CriticalSummary": {
+      "type": "object",
+      "required": [
+        "allergies",
+        "medications",
+        "chronic_conditions",
+        "alerts",
+        "recent_vitals"
+      ],
+      "properties": {
+        "allergies": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/CriticalItem" }
+        },
+        "medications": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/CriticalItem" }
+        },
+        "chronic_conditions": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/CriticalItem" }
+        },
+        "code_status": { "type": ["string", "null"] },
+        "alerts": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/CriticalItem" }
+        },
+        "recent_vitals": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/VitalSnapshot" }
+        }
+      }
+    },
+    "TimelineEvent": {
+      "type": "object",
+      "required": ["id", "category", "title", "severity"],
+      "properties": {
+        "id": { "type": "string" },
+        "category": { "$ref": "#/definitions/EventCategory" },
+        "title": { "type": "string" },
+        "detail": { "type": ["string", "null"] },
+        "occurred_at": {
+          "type": ["string", "null"],
+          "format": "date-time"
+        },
+        "severity": { "$ref": "#/definitions/Severity" },
+        "source": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/definitions/ResourceReference" }
+          ]
+        }
+      }
+    }
+  }
+}

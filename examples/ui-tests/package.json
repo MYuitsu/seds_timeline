@@ -1,0 +1,12 @@
+{
+  "name": "@seds-timeline/ui-tests",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "react",
+    "angular",
+    "vue"
+  ]
+}

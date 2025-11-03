@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["vitest/importMeta", "vitest/globals"],
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
+  },
+  "include": ["src", "tests", "../types.d.ts"]
+}

@@ -1,0 +1,48 @@
+{
+  "resourceType": "Bundle",
+  "type": "collection",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "Patient",
+        "id": "patient-001",
+        "name": [
+          {
+            "given": ["John"],
+            "family": "Smith"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-1",
+        "status": "final",
+        "code": {
+          "text": "Heart rate"
+        },
+        "valueQuantity": {
+          "value": 112,
+          "unit": "bpm"
+        },
+        "issued": "2025-10-30T12:15:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-2",
+        "status": "final",
+        "code": {
+          "text": "SpO2"
+        },
+        "valueQuantity": {
+          "value": 92,
+          "unit": "%"
+        },
+        "issued": "2025-10-30T12:10:00Z"
+      }
+    }
+  ]
+}
