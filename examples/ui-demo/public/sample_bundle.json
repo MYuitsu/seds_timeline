@@ -440,6 +440,122 @@
         },
         "performedDateTime": "2025-10-30T09:30:00Z"
       }
+    },
+    {
+      "resource": {
+        "resourceType": "MedicationStatement",
+        "id": "med-steroids",
+        "status": "active",
+        "medicationCodeableConcept": {
+          "text": "Methylprednisolone 40 mg IV q12h"
+        },
+        "reasonCode": [
+          {
+            "text": "COPD exacerbation"
+          }
+        ],
+        "effectivePeriod": {
+          "start": "2025-10-29T07:30:00Z"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-crp",
+        "code": {
+          "text": "C-reactive protein"
+        },
+        "valueQuantity": {
+          "value": 126,
+          "unit": "mg/L"
+        },
+        "effectiveDateTime": "2025-10-29T08:50:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-ct-chest",
+        "code": {
+          "text": "CT chest with contrast"
+        },
+        "valueString": "Multifocal consolidations consistent with pneumonia",
+        "effectiveDateTime": "2025-10-29T11:10:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "proc-bronch",
+        "status": "completed",
+        "code": {
+          "text": "Therapeutic bronchoscopy"
+        },
+        "performedDateTime": "2025-10-29T13:30:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "DocumentReference",
+        "id": "doc-rt-note",
+        "type": {
+          "text": "Respiratory therapy progress note"
+        },
+        "date": "2025-10-29T14:15:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-hr-previous",
+        "code": {
+          "text": "Heart rate"
+        },
+        "valueQuantity": {
+          "value": 102,
+          "unit": "bpm"
+        },
+        "effectiveDateTime": "2025-10-29T16:45:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-labs-ck",
+        "code": {
+          "text": "Creatinine"
+        },
+        "valueQuantity": {
+          "value": 1.6,
+          "unit": "mg/dL"
+        },
+        "effectiveDateTime": "2025-10-28T06:20:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-procalcitonin",
+        "code": {
+          "text": "Procalcitonin"
+        },
+        "valueQuantity": {
+          "value": 3.1,
+          "unit": "ng/mL"
+        },
+        "effectiveDateTime": "2025-10-28T07:10:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "DocumentReference",
+        "id": "doc-hist",
+        "type": {
+          "text": "Outside hospital transfer summary"
+        },
+        "date": "2025-10-28T09:40:00Z"
+      }
     }
   ]
 }

@@ -8,7 +8,10 @@ mod wasm_ui {
     use crate::styles;
     use chrono::{DateTime, Duration, NaiveDate, Utc};
     use serde_wasm_bindgen::from_value;
-    use std::{cmp::Ordering, collections::{BTreeMap, HashSet}};
+    use std::{
+        cmp::Ordering,
+        collections::{BTreeMap, HashMap, HashSet},
+    };
     use timeline_core::{
         CriticalItem, CriticalSummary, DiagnosticKind, DiagnosticSnapshot, EventCategory, Severity,
         TimelineEvent, TimelineSnapshot, VitalSnapshot, VitalTrend,
@@ -51,6 +54,20 @@ mod wasm_ui {
         "radiograph",
     ];
 
+    const TIMELINE_BUCKET_COLUMNS: &[(&str, &str)] = &[
+        ("Vitals", "Vitals"),
+        ("Labs", "Labs"),
+        ("Imaging", "Imaging"),
+        ("Observations", "Observations"),
+        ("Medications", "Medications"),
+        ("Procedures", "Procedures"),
+        ("Encounters", "Encounters"),
+        ("Conditions", "Conditions"),
+        ("Documents", "Documents"),
+        ("Notes", "Notes"),
+        ("Events", "Other"),
+    ];
+
     #[derive(Clone, Default, PartialEq)]
     struct FilterState {
         severity: Option<Severity>,
@@ -65,6 +82,27 @@ mod wasm_ui {
         moderate: usize,
         low: usize,
         info: usize,
+    }
+
+    struct DayRow<'a> {
+        label: String,
+        key: String,
+        summary: String,
+        default_collapsed: bool,
+        is_expanded: bool,
+        event_count: usize,
+        buckets: HashMap<&'static str, Vec<&'a TimelineEvent>>,
+    }
+
+    struct GroupedEvents<'a> {
+        title: String,
+        events: Vec<&'a TimelineEvent>,
+    }
+
+    struct MeasurementPoint<'a> {
+        event: &'a TimelineEvent,
+        value: f64,
+        unit: Option<String>,
     }
 
     #[derive(Clone, Copy, PartialEq)]
@@ -152,25 +190,9 @@ mod wasm_ui {
         let severity_controls = render_severity_filters(filters.clone());
 
         let events_view = if filtered_events.is_empty() {
-            html! { <li class="timeline-empty">{"No events match the current filters."}</li> }
+            html! { <div class="timeline-empty">{"No events match the current filters."}</div> }
         } else {
-            html! {
-                <>
-                    { for grouped_events.into_iter().enumerate().map(|(index, (label, events))| {
-                        let key = group_storage_key(&label, &events);
-                        let default_collapsed = should_collapse_group(index, &label, &events);
-                        let is_expanded = expanded_snapshot.contains(&key) || !default_collapsed;
-                        render_event_group(
-                            label,
-                            events,
-                            key,
-                            is_expanded,
-                            default_collapsed,
-                            expanded_groups.clone(),
-                        )
-                    }) }
-                </>
-            }
+            render_category_grid(grouped_events, expanded_groups.clone(), expanded_snapshot)
         };
 
         html! {
@@ -219,9 +241,9 @@ mod wasm_ui {
                             <button type="button" onclick={on_clear_filters.clone()} aria-label="Clear filters">{"Reset"}</button>
                         </div>
                     </header>
-                    <ul class="timeline-events">
+                    <div class="timeline-events">
                         { events_view }
-                    </ul>
+                    </div>
                 </section>
             </div>
         }
@@ -861,61 +883,465 @@ mod wasm_ui {
         }
     }
 
-    fn render_event_group(
-        label: String,
-        events: Vec<&TimelineEvent>,
-        key: String,
-        is_expanded: bool,
-        default_collapsed: bool,
+    fn render_category_grid(
+        grouped_events: Vec<(String, Vec<&TimelineEvent>)>,
+        expanded_groups: UseStateHandle<HashSet<String>>,
+        expanded_snapshot: HashSet<String>,
+    ) -> Html {
+        let mut bucket_totals: HashMap<&'static str, usize> = HashMap::new();
+        let mut day_rows: Vec<DayRow<'_>> = Vec::new();
+
+        for (index, (label, events)) in grouped_events.into_iter().enumerate() {
+            let key = group_storage_key(&label, &events);
+            let default_collapsed = should_collapse_group(index, &label, &events);
+            let is_expanded = expanded_snapshot.contains(&key) || !default_collapsed;
+            let summary = summarize_group(&events);
+            let event_count = events.len();
+            let mut buckets: HashMap<&'static str, Vec<&TimelineEvent>> = HashMap::new();
+
+            for event in &events {
+                let bucket = categorize_event_for_summary(event);
+                *bucket_totals.entry(bucket).or_insert(0) += 1;
+                buckets.entry(bucket).or_default().push(*event);
+            }
+
+            for bucket_events in buckets.values_mut() {
+                bucket_events.sort_by(|a, b| compare_datetimes(b.occurred_at, a.occurred_at));
+            }
+
+            day_rows.push(DayRow {
+                label,
+                key,
+                summary,
+                default_collapsed,
+                is_expanded,
+                event_count,
+                buckets,
+            });
+        }
+
+        html! {
+            <div class="timeline-category-grid">
+                <div class="timeline-category-head">
+                    <div class="timeline-category-corner">{"Day"}</div>
+                    {
+                        for TIMELINE_BUCKET_COLUMNS.iter().map(|(bucket, heading)| {
+                            let count = bucket_totals.get(bucket).copied().unwrap_or(0);
+                            render_category_header_cell(*heading, count, bucket_slug(bucket))
+                        })
+                    }
+                </div>
+                {
+                    for day_rows.iter().map(|row| {
+                        render_category_day_row(row, expanded_groups.clone())
+                    })
+                }
+            </div>
+        }
+    }
+
+    fn render_category_header_cell(heading: &str, count: usize, bucket_slug: &'static str) -> Html {
+        html! {
+            <div class="timeline-category-head-cell" data-bucket={bucket_slug}>
+                <span class="timeline-category-title">{ heading }</span>
+                <span class="timeline-category-count">{ count }</span>
+            </div>
+        }
+    }
+
+    fn render_category_day_row(
+        row: &DayRow<'_>,
         expanded_groups: UseStateHandle<HashSet<String>>,
     ) -> Html {
-        let summary = summarize_group(&events);
-        let toggle_key = key.clone();
-        let toggle_handle = expanded_groups.clone();
-        let toggle = Callback::from(move |_| {
-            let mut next = (*toggle_handle).clone();
-            if next.contains(&toggle_key) {
-                next.remove(&toggle_key);
-            } else {
-                next.insert(toggle_key.clone());
-            }
-            toggle_handle.set(next);
-        });
+        let is_collapsed = row.default_collapsed && !row.is_expanded;
 
-        let toggle_button = if default_collapsed {
-            let label_text = if is_expanded { "Collapse" } else { "Expand" };
+        html! {
+            <div class="timeline-category-row" data-group-key={row.key.clone()}>
+                { render_day_row_header(row, expanded_groups.clone()) }
+                {
+                    for TIMELINE_BUCKET_COLUMNS.iter().map(|(bucket, _)| {
+                        let events = row.buckets.get(bucket);
+                        render_category_cell(events, is_collapsed)
+                    })
+                }
+            </div>
+        }
+    }
+
+    fn render_day_row_header(
+        row: &DayRow<'_>,
+        expanded_groups: UseStateHandle<HashSet<String>>,
+    ) -> Html {
+        let label = row.label.clone();
+        let summary_text = row.summary.clone();
+        let event_count = row.event_count;
+        let default_collapsed = row.default_collapsed;
+        let is_expanded = row.is_expanded;
+        let key = row.key.clone();
+
+        let button = if default_collapsed {
+            let handle = expanded_groups.clone();
+            let key_clone = key.clone();
+            let text = if is_expanded { "Collapse" } else { "Expand" };
             html! {
                 <button
                     type="button"
                     class="group-toggle"
-                    onclick={toggle}
                     aria-expanded={is_expanded.to_string()}
+                    onclick={Callback::from(move |_| {
+                        let mut next = (*handle).clone();
+                        if next.contains(&key_clone) {
+                            next.remove(&key_clone);
+                        } else {
+                            next.insert(key_clone.clone());
+                        }
+                        handle.set(next);
+                    })}
                 >
-                    { label_text }
+                    { text }
                 </button>
             }
         } else {
             Html::default()
         };
 
-        let body = if !is_expanded && default_collapsed {
-            html! { <div class="timeline-group-summary">{ summary }</div> }
-        } else {
-            html! {
-                <ul>
-                    { for events.into_iter().map(render_event) }
-                </ul>
-            }
+        html! {
+            <div
+                class={classes!(
+                    "timeline-category-label",
+                    (!is_expanded && default_collapsed).then_some("is-collapsed"),
+                )}
+            >
+                <span class="timeline-day-name">{ label }</span>
+                <span class="timeline-day-count">{ format!("{event_count} events") }</span>
+                {
+                    (!is_expanded && default_collapsed)
+                        .then(|| html! { <span class="timeline-day-summary">{ summary_text.clone() }</span> })
+                        .unwrap_or_default()
+                }
+                { button }
+            </div>
+        }
+    }
+
+    fn render_category_cell(events: Option<&Vec<&TimelineEvent>>, is_collapsed: bool) -> Html {
+        if is_collapsed {
+            return html! {
+                <div class="timeline-category-cell is-collapsed">
+                    <span class="timeline-category-placeholder">{"Collapsed"}</span>
+                </div>
+            };
+        }
+
+        let Some(events) = events else {
+            return html! {
+                <div class="timeline-category-cell is-empty">
+                    <span class="timeline-category-placeholder">{"--"}</span>
+                </div>
+            };
         };
 
-        html! {
-            <li class="timeline-group" data-group-key={key}>
-                <div class="timeline-group-header">
-                    <span>{ label }</span>
-                    { toggle_button }
+        if events.is_empty() {
+            return html! {
+                <div class="timeline-category-cell is-empty">
+                    <span class="timeline-category-placeholder">{"--"}</span>
                 </div>
-                { body }
-            </li>
+            };
+        }
+
+        let grouped = group_events_by_title(events.as_slice());
+
+        html! {
+            <div class="timeline-category-cell">
+                {
+                    for grouped.iter().map(|group| render_grouped_category(group))
+                }
+            </div>
+        }
+    }
+
+    fn group_events_by_title<'a>(events: &'a [&'a TimelineEvent]) -> Vec<GroupedEvents<'a>> {
+        let mut grouped: BTreeMap<String, Vec<&'a TimelineEvent>> = BTreeMap::new();
+
+        for event in events {
+            grouped.entry(event.title.clone()).or_default().push(*event);
+        }
+
+        let mut groups: Vec<GroupedEvents<'a>> = grouped
+            .into_iter()
+            .map(|(title, mut list)| {
+                list.sort_by(|a, b| compare_datetimes(b.occurred_at, a.occurred_at));
+                GroupedEvents { title, events: list }
+            })
+            .collect();
+
+        groups.sort_by(|a, b| {
+            let latest_a = a
+                .events
+                .first()
+                .and_then(|event| event.occurred_at);
+            let latest_b = b
+                .events
+                .first()
+                .and_then(|event| event.occurred_at);
+            compare_datetimes(latest_b, latest_a)
+        });
+
+        groups
+    }
+
+    fn render_grouped_category(group: &GroupedEvents<'_>) -> Html {
+        let severity = group
+            .events
+            .iter()
+            .fold(Severity::Info, |current, event| {
+                if event.severity < current {
+                    event.severity
+                } else {
+                    current
+                }
+            });
+        let severity_label = severity_label(severity);
+        let severity_level = severity_level(severity);
+        let count = group.events.len();
+        let count_label = if count == 1 {
+            "1 entry".to_string()
+        } else {
+            format!("{count} entries")
+        };
+
+        let latest = group
+            .events
+            .first()
+            .and_then(|event| event.occurred_at);
+        let earliest = group
+            .events
+            .last()
+            .and_then(|event| event.occurred_at);
+
+        let range_label = format_time_range(earliest, latest);
+        let relative_label = format_relative_time(latest);
+
+        let measurements: Vec<MeasurementPoint<'_>> = group
+            .events
+            .iter()
+            .filter_map(|event| extract_measurement(event))
+            .collect();
+
+        let chart_markup = render_group_chart(&measurements, earliest, latest);
+        let has_chart = chart_markup.is_some();
+        let details_markup = render_group_details(group.events.as_slice(), has_chart);
+        let chart_html = chart_markup.unwrap_or_else(Html::default);
+
+        let mut meta: Vec<Html> = Vec::new();
+
+        if let Some(range) = range_label {
+            meta.push(html! {
+                <span class="timeline-group-range">{ format!("Range {range}") }</span>
+            });
+        }
+
+        if let Some(relative) = relative_label {
+            meta.push(html! {
+                <span class="timeline-group-relative">{ format!("Last reading {relative}") }</span>
+            });
+        }
+
+        let key = group
+            .events
+            .first()
+            .map(|event| event.id.clone())
+            .unwrap_or_else(|| group.title.clone());
+
+        html! {
+            <div class="timeline-category-group" key={key}>
+                <header class="timeline-group-header">
+                    <span class="timeline-group-title">{ group.title.clone() }</span>
+                    <span class="timeline-group-count">{ count_label }</span>
+                    <span class="severity-badge" data-level={severity_level}>{ severity_label }</span>
+                </header>
+                {
+                    if meta.is_empty() {
+                        Html::default()
+                    } else {
+                        html! {
+                            <div class="timeline-group-meta">
+                                { for meta }
+                            </div>
+                        }
+                    }
+                }
+                { chart_html }
+                { details_markup }
+            </div>
+        }
+    }
+
+    fn render_group_details(events: &[&TimelineEvent], collapsible: bool) -> Html {
+        if events.is_empty() {
+            return Html::default();
+        }
+
+        if collapsible {
+            html! {
+                <details class="timeline-group-details">
+                    <summary>{"View entries"}</summary>
+                    <ul class="timeline-cell-list">
+                        { for events.iter().map(|event| render_event(*event)) }
+                    </ul>
+                </details>
+            }
+        } else {
+            html! {
+                <ul class="timeline-cell-list">
+                    { for events.iter().map(|event| render_event(*event)) }
+                </ul>
+            }
+        }
+    }
+
+    fn render_group_chart(
+        measurements: &[MeasurementPoint<'_>],
+        earliest: Option<DateTime<Utc>>,
+        latest: Option<DateTime<Utc>>,
+    ) -> Option<Html> {
+        if measurements.len() < 2 {
+            return None;
+        }
+
+        let values_desc: Vec<f64> = measurements.iter().map(|point| point.value).collect();
+        if values_desc.is_empty() {
+            return None;
+        }
+
+        if values_desc.iter().any(|value| !value.is_finite()) {
+            return None;
+        }
+
+        let mut values_asc = values_desc.clone();
+        values_asc.reverse();
+
+        let Some(sparkline) = build_sparkline(&values_asc, 240.0, 60.0) else {
+            return None;
+        };
+
+        let unit_hint = measurements
+            .iter()
+            .find_map(|point| point.unit.as_deref());
+
+        let latest_point = &measurements[0];
+        let latest_label = format_measurement(latest_point.value, unit_hint);
+
+        let min_value = values_desc
+            .iter()
+            .fold(f64::INFINITY, |acc, value| acc.min(*value));
+        let max_value = values_desc
+            .iter()
+            .fold(f64::NEG_INFINITY, |acc, value| acc.max(*value));
+
+        if !min_value.is_finite() || !max_value.is_finite() {
+            return None;
+        }
+
+        let min_label = format_measurement(min_value, unit_hint);
+        let max_label = format_measurement(max_value, unit_hint);
+
+        let start_label = earliest.map(format_clock_time);
+        let end_label = latest.map(format_clock_time);
+
+        Some(html! {
+            <div class="timeline-group-chart">
+                <div class="timeline-group-stats">
+                    <span class="timeline-group-stat" data-kind="latest">{ format!("Latest {latest_label}") }</span>
+                    <span class="timeline-group-stat" data-kind="high">{ format!("High {max_label}") }</span>
+                    <span class="timeline-group-stat" data-kind="low">{ format!("Low {min_label}") }</span>
+                </div>
+                <svg
+                    class="timeline-group-chart-plot"
+                    viewBox="0 0 240 60"
+                    preserveAspectRatio="none"
+                    role="img"
+                    aria-label={format!("Trend for {}", latest_point.event.title)}
+                >
+                    <path d={sparkline.path.clone()} />
+                    <circle cx={format!("{:.2}", sparkline.last_x)} cy={format!("{:.2}", sparkline.last_y)} r="2.5" />
+                </svg>
+                {
+                    if start_label.is_some() || end_label.is_some() {
+                        html! {
+                            <div class="timeline-group-axis">
+                                <span>{ start_label.unwrap_or_else(|| "--:--".to_string()) }</span>
+                                <span>{ end_label.unwrap_or_else(|| "--:--".to_string()) }</span>
+                            </div>
+                        }
+                    } else {
+                        Html::default()
+                    }
+                }
+            </div>
+        })
+    }
+
+    fn extract_measurement(event: &TimelineEvent) -> Option<MeasurementPoint<'_>> {
+        let detail = event.detail.as_ref()?;
+        let (value, unit) = parse_measurement_detail(detail)?;
+        Some(MeasurementPoint {
+            event,
+            value,
+            unit,
+        })
+    }
+
+    fn parse_measurement_detail(detail: &str) -> Option<(f64, Option<String>)> {
+        let mut chars = detail.chars().peekable();
+
+        while let Some(&ch) = chars.peek() {
+            if ch.is_ascii_digit() || ch == '.' || ch == '-' {
+                break;
+            }
+            chars.next();
+        }
+
+        let mut number = String::new();
+
+        while let Some(&ch) = chars.peek() {
+            if ch.is_ascii_digit() || ch == '.' || (ch == '-' && number.is_empty()) {
+                number.push(ch);
+                chars.next();
+            } else {
+                break;
+            }
+        }
+
+        if number.is_empty() {
+            return None;
+        }
+
+        let value = number.parse::<f64>().ok()?;
+        let remainder: String = chars.collect();
+        let unit = remainder.trim();
+        let unit = if unit.is_empty() {
+            None
+        } else {
+            Some(unit.to_string())
+        };
+
+        Some((value, unit))
+    }
+
+    fn bucket_slug(bucket: &str) -> &'static str {
+        match bucket {
+            "Vitals" => "vitals",
+            "Labs" => "labs",
+            "Imaging" => "imaging",
+            "Observations" => "observations",
+            "Medications" => "medications",
+            "Procedures" => "procedures",
+            "Encounters" => "encounters",
+            "Conditions" => "conditions",
+            "Documents" => "documents",
+            "Notes" => "notes",
+            _ => "other",
         }
     }
 
