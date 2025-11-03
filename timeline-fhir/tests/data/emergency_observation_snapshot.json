@@ -1,143 +1,620 @@
 {
-  "generated_at": "__DYNAMIC_TIMESTAMP__",
-  "critical": {
-    "allergies": [
-      {
-        "label": "Dị ứng: Penicillin",
-        "detail": "Phản ứng: Anaphylaxis | Độ nguy kịch: HIGH",
-        "severity": "critical"
-      }
-    ],
-    "medications": [
-      {
-        "label": "Thuốc: Norepinephrine infusion",
-        "detail": "Trạng thái: ACTIVE | Chỉ định: Shock | Titrated to MAP >65 | Đường dùng: Intravenous | Tốc độ: 8 mcg/min",
-        "severity": "high"
-      }
-    ],
-    "chronic_conditions": [
-      {
-        "label": "Bệnh mạn: Sepsis",
-        "detail": "Trạng thái: Active | Mức độ: Severe",
-        "severity": "critical"
-      }
-    ],
-    "code_status": "DNR / DNI",
-    "alerts": [
-      {
-        "label": "Bệnh nhân: Jane Doe",
-        "detail": "50 tuổi | Nữ",
-        "severity": "info"
-      }
-    ],
-    "recent_vitals": [
-      {
-        "name": "Mạch",
-        "value": "128 bpm",
-        "recorded_at": "2025-10-30T12:20:00Z"
-      },
-      {
-        "name": "SpO2",
-        "value": "86 %",
-        "recorded_at": "2025-10-30T12:18:00Z"
-      },
-      {
-        "name": "HA",
-        "value": "78/44 mmHg",
-        "recorded_at": "2025-10-30T12:15:00Z"
-      }
-    ]
-  },
-  "events": [
+  "resourceType": "Bundle",
+  "id": "emergency-observation-summary",
+  "type": "collection",
+  "timestamp": "2025-10-30T12:25:00Z",
+  "entry": [
     {
-      "id": "allergy-penicillin",
-      "category": "Condition",
-      "title": "Ghi nhận dị ứng với Penicillin",
-      "detail": "Phản ứng: Anaphylaxis | Độ nguy kịch: HIGH",
-      "occurred_at": "2025-10-30T06:40:00Z",
-      "severity": "critical",
-      "source": {
-        "system": "FHIR",
-        "reference": "AllergyIntolerance/allergy-penicillin",
-        "display": "Penicillin"
+      "fullUrl": "urn:uuid:patient-123",
+      "resource": {
+        "resourceType": "Patient",
+        "id": "patient-123",
+        "name": [
+          {
+            "use": "official",
+            "family": "Doe",
+            "given": ["Jane"]
+          }
+        ],
+        "gender": "female",
+        "birthDate": "1975-04-18"
       }
     },
     {
-      "id": "obs-code-status",
-      "category": "Observation",
-      "title": "Cập nhật code status",
-      "detail": "DNR / DNI",
-      "occurred_at": "2025-10-30T08:05:00Z",
-      "severity": "critical",
-      "source": {
-        "system": "FHIR",
-        "reference": "Observation/obs-code-status",
-        "display": "Code status"
+      "fullUrl": "urn:uuid:enc-1",
+      "resource": {
+        "resourceType": "Encounter",
+        "id": "enc-1",
+        "status": "in-progress",
+        "class": {
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+          "code": "EMER",
+          "display": "Emergency"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "http://www.ama-assn.org/go/cpt",
+                "code": "99285",
+                "display": "Emergency department visit"
+              }
+            ],
+            "text": "ED visit"
+          }
+        ],
+        "subject": {
+          "reference": "Patient/patient-123"
+        },
+        "reasonCode": [
+          {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "267036007",
+                "display": "Dyspnea"
+              }
+            ],
+            "text": "Dyspnea"
+          }
+        ],
+        "period": {
+          "start": "2025-10-30T07:55:00Z"
+        }
       }
     },
     {
-      "id": "cond-sepsis",
-      "category": "Condition",
-      "title": "Sepsis",
-      "detail": "Trạng thái: Active | Mức độ: Severe",
-      "occurred_at": "2025-10-30T08:45:00Z",
-      "severity": "critical",
-      "source": {
-        "system": "FHIR",
-        "reference": "Condition/cond-sepsis",
-        "display": "Sepsis"
+      "fullUrl": "urn:uuid:allergy-penicillin",
+      "resource": {
+        "resourceType": "AllergyIntolerance",
+        "id": "allergy-penicillin",
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical",
+              "code": "active"
+            }
+          ]
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification",
+              "code": "confirmed"
+            }
+          ]
+        },
+        "type": "allergy",
+        "criticality": "high",
+        "category": ["medication"],
+        "code": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "7980",
+              "display": "Penicillin"
+            }
+          ],
+          "text": "Penicillin"
+        },
+        "patient": {
+          "reference": "Patient/patient-123"
+        },
+        "recordedDate": "2025-10-30T06:40:00Z",
+        "reaction": [
+          {
+            "severity": "severe",
+            "manifestation": [
+              {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "39579001",
+                    "display": "Anaphylaxis"
+                  }
+                ],
+                "text": "Anaphylaxis"
+              }
+            ]
+          }
+        ]
       }
     },
     {
-      "id": "med-norepi",
-      "category": "Medication",
-      "title": "Norepinephrine infusion",
-      "detail": "Trạng thái: ACTIVE | Chỉ định: Shock | Titrated to MAP >65 | Đường dùng: Intravenous | Tốc độ: 8 mcg/min",
-      "occurred_at": "2025-10-30T09:05:00Z",
-      "severity": "high",
-      "source": {
-        "system": "FHIR",
-        "reference": "MedicationStatement/med-norepi",
-        "display": null
+      "fullUrl": "urn:uuid:cond-sepsis",
+      "resource": {
+        "resourceType": "Condition",
+        "id": "cond-sepsis",
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active"
+            }
+          ]
+        },
+        "severity": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "24484000",
+              "display": "Severe"
+            }
+          ],
+          "text": "Severe"
+        },
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "91302008",
+              "display": "Sepsis"
+            }
+          ],
+          "text": "Sepsis"
+        },
+        "subject": {
+          "reference": "Patient/patient-123"
+        },
+        "encounter": {
+          "reference": "Encounter/enc-1"
+        },
+        "recordedDate": "2025-10-30T08:45:00Z"
       }
     },
     {
-      "id": "obs-bp",
-      "category": "Observation",
-      "title": "Blood pressure",
-      "detail": "78/44 mmHg",
-      "occurred_at": "2025-10-30T12:15:00Z",
-      "severity": "high",
-      "source": {
-        "system": "FHIR",
-        "reference": "Observation/obs-bp",
-        "display": "Blood pressure"
+      "fullUrl": "urn:uuid:cond-copd",
+      "resource": {
+        "resourceType": "Condition",
+        "id": "cond-copd",
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active"
+            }
+          ]
+        },
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "13645005",
+              "display": "Chronic obstructive pulmonary disease"
+            }
+          ],
+          "text": "Chronic obstructive pulmonary disease"
+        },
+        "subject": {
+          "reference": "Patient/patient-123"
+        },
+        "recordedDate": "2025-09-01"
       }
     },
     {
-      "id": "obs-spo2",
-      "category": "Observation",
-      "title": "SpO2",
-      "detail": "86 %",
-      "occurred_at": "2025-10-30T12:18:00Z",
-      "severity": "high",
-      "source": {
-        "system": "FHIR",
-        "reference": "Observation/obs-spo2",
-        "display": "SpO2"
+      "fullUrl": "urn:uuid:med-norepi",
+      "resource": {
+        "resourceType": "MedicationStatement",
+        "id": "med-norepi",
+        "status": "active",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "11124",
+              "display": "Norepinephrine"
+            }
+          ],
+          "text": "Norepinephrine infusion"
+        },
+        "subject": {
+          "reference": "Patient/patient-123"
+        },
+        "encounter": {
+          "reference": "Encounter/enc-1"
+        },
+        "reasonCode": [
+          {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "73595000",
+                "display": "Shock"
+              }
+            ],
+            "text": "Shock"
+          }
+        ],
+        "effectivePeriod": {
+          "start": "2025-10-30T09:05:00Z"
+        },
+        "dosage": [
+          {
+            "text": "Titrated to MAP >65",
+            "route": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "47625008",
+                  "display": "Intravenous route"
+                }
+              ],
+              "text": "Intravenous"
+            },
+            "rateQuantity": {
+              "value": 8,
+              "unit": "mcg/min"
+            }
+          }
+        ]
       }
     },
     {
-      "id": "obs-hr",
-      "category": "Observation",
-      "title": "Heart rate",
-      "detail": "128 bpm",
-      "occurred_at": "2025-10-30T12:20:00Z",
-      "severity": "high",
-      "source": {
-        "system": "FHIR",
-        "reference": "Observation/obs-hr",
-        "display": "Heart rate"
+      "fullUrl": "urn:uuid:med-levom",
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "id": "med-levom",
+        "status": "active",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "system": "http://www.nlm.nih.gov/research/umls/rxnorm",
+              "code": "197361",
+              "display": "Levofloxacin"
+            }
+          ],
+          "text": "Levofloxacin 750 mg IV q24h"
+        },
+        "subject": {
+          "reference": "Patient/patient-123"
+        },
+        "encounter": {
+          "reference": "Encounter/enc-1"
+        },
+        "authoredOn": "2025-10-30T10:10:00Z",
+        "reasonCode": [
+          {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "53084003",
+                "display": "Pneumonia"
+              }
+            ],
+            "text": "Pneumonia"
+          }
+        ],
+        "dosageInstruction": [
+          {
+            "text": "750 mg IV every 24 hours"
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:obs-code-status",
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-code-status",
+        "status": "final",
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "45415-0",
+              "display": "Advance directive"
+            }
+          ],
+          "text": "Code status"
+        },
+        "subject": {
+          "reference": "Patient/patient-123"
+        },
+        "effectiveDateTime": "2025-10-30T08:05:00Z",
+        "valueCodeableConcept": {
+          "text": "DNR / DNI"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:obs-hr",
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-hr",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8867-4",
+              "display": "Heart rate"
+            }
+          ],
+          "text": "Heart rate"
+        },
+        "subject": {
+          "reference": "Patient/patient-123"
+        },
+        "encounter": {
+          "reference": "Encounter/enc-1"
+        },
+        "effectiveDateTime": "2025-10-30T12:20:00Z",
+        "valueQuantity": {
+          "value": 128,
+          "unit": "beats/minute",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:obs-spo2",
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-spo2",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "59408-5",
+              "display": "Oxygen saturation in Arterial blood by Pulse oximetry"
+            }
+          ],
+          "text": "SpO2"
+        },
+        "subject": {
+          "reference": "Patient/patient-123"
+        },
+        "encounter": {
+          "reference": "Encounter/enc-1"
+        },
+        "effectiveDateTime": "2025-10-30T12:18:00Z",
+        "valueQuantity": {
+          "value": 86,
+          "unit": "%",
+          "system": "http://unitsofmeasure.org",
+          "code": "%"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:obs-bp",
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-bp",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "85354-9",
+              "display": "Blood pressure panel with all children optional"
+            }
+          ],
+          "text": "Blood pressure"
+        },
+        "subject": {
+          "reference": "Patient/patient-123"
+        },
+        "encounter": {
+          "reference": "Encounter/enc-1"
+        },
+        "effectiveDateTime": "2025-10-30T12:15:00Z",
+        "component": [
+          {
+            "code": {
+              "coding": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "8480-6",
+                  "display": "Systolic blood pressure"
+                }
+              ],
+              "text": "Systolic blood pressure"
+            },
+            "valueQuantity": {
+              "value": 78,
+              "unit": "mmHg",
+              "system": "http://unitsofmeasure.org",
+              "code": "mm[Hg]"
+            }
+          },
+          {
+            "code": {
+              "coding": [
+                {
+                  "system": "http://loinc.org",
+                  "code": "8462-4",
+                  "display": "Diastolic blood pressure"
+                }
+              ],
+              "text": "Diastolic blood pressure"
+            },
+            "valueQuantity": {
+              "value": 44,
+              "unit": "mmHg",
+              "system": "http://unitsofmeasure.org",
+              "code": "mm[Hg]"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:obs-resp",
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-resp",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "9279-1",
+              "display": "Respiratory rate"
+            }
+          ],
+          "text": "Respiratory rate"
+        },
+        "subject": {
+          "reference": "Patient/patient-123"
+        },
+        "encounter": {
+          "reference": "Encounter/enc-1"
+        },
+        "effectiveDateTime": "2025-10-30T12:10:00Z",
+        "valueQuantity": {
+          "value": 32,
+          "unit": "breaths/min",
+          "system": "http://unitsofmeasure.org",
+          "code": "/min"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:obs-temp",
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-temp",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "vital-signs"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "8310-5",
+              "display": "Body temperature"
+            }
+          ],
+          "text": "Temperature"
+        },
+        "subject": {
+          "reference": "Patient/patient-123"
+        },
+        "encounter": {
+          "reference": "Encounter/enc-1"
+        },
+        "effectiveDateTime": "2025-10-30T11:58:00Z",
+        "valueQuantity": {
+          "value": 38.6,
+          "unit": "C",
+          "system": "http://unitsofmeasure.org",
+          "code": "Cel"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:obs-lactate",
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-lactate",
+        "status": "final",
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                "code": "laboratory"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://loinc.org",
+              "code": "15283-9",
+              "display": "Lactate [Moles/volume] in Venous blood"
+            }
+          ],
+          "text": "Lactate"
+        },
+        "subject": {
+          "reference": "Patient/patient-123"
+        },
+        "encounter": {
+          "reference": "Encounter/enc-1"
+        },
+        "effectiveDateTime": "2025-10-30T11:50:00Z",
+        "valueQuantity": {
+          "value": 4.3,
+          "unit": "mmol/L",
+          "system": "http://unitsofmeasure.org",
+          "code": "mmol/L"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:proc-cvl",
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "proc-cvl",
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://www.ama-assn.org/go/cpt",
+              "code": "36556",
+              "display": "Insertion of non-tunneled centrally inserted central venous catheter"
+            }
+          ],
+          "text": "Central venous catheter insertion"
+        },
+        "subject": {
+          "reference": "Patient/patient-123"
+        },
+        "performedDateTime": "2025-10-30T09:30:00Z"
       }
     }
   ]

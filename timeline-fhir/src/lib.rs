@@ -1,15 +1,15 @@
-//! Bộ chuyển đổi FHIR JSON thành `TimelineSnapshot` v0.2 với phân tích mở rộng.
+//! FHIR JSON to `TimelineSnapshot` converter with extended analytics.
 
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap};
 
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use serde_json::Value;
 use timeline_core::{
     CriticalItem, CriticalSummary, EventCategory, ResourceReference, Severity, TimelineConfig,
-    TimelineError, TimelineEvent, TimelineSnapshot, VitalSnapshot,
+    TimelineError, TimelineEvent, TimelineSnapshot, VitalSnapshot, VitalTrend, VitalTrendPoint,
 };
 
-/// Tổng hợp từ chuỗi JSON.
+/// Summarize timeline data from a JSON string.
 pub fn summarize_bundle_str(
     bundle_json: &str,
     config: &TimelineConfig,
@@ -19,7 +19,7 @@ pub fn summarize_bundle_str(
     summarize_bundle_value(&value, config)
 }
 
-/// Tổng hợp từ `serde_json::Value`.
+/// Summarize timeline data from a `serde_json::Value`.
 pub fn summarize_bundle_value(
     bundle: &Value,
     config: &TimelineConfig,
@@ -31,7 +31,7 @@ pub fn summarize_bundle_value(
 
     if bundle_type != "Bundle" {
         return Err(TimelineError::Parse(format!(
-            "resourceType mong đợi là Bundle, nhận {bundle_type}"
+            "Expected resourceType Bundle, received {bundle_type}"
         )));
     }
 
@@ -78,6 +78,7 @@ struct AggregateData {
     chronic_conditions: Vec<CriticalItem>,
     code_status: Option<CodeStatusRecord>,
     vitals: HashMap<String, VitalSnapshot>,
+    vital_trends: HashMap<String, TrendAccumulator>,
     events: Vec<TimelineEvent>,
 }
 
@@ -94,14 +95,14 @@ impl AggregateData {
             let mut detail_parts = Vec::new();
 
             if let Some(age) = extract_patient_age(resource) {
-                detail_parts.push(format!("{age} tuổi"));
+                detail_parts.push(format!("Age {age}"));
             }
 
             if let Some(gender) = resource.get("gender").and_then(Value::as_str) {
                 detail_parts.push(match gender {
-                    "male" => "Nam".to_string(),
-                    "female" => "Nữ".to_string(),
-                    other => format!("Giới tính: {other}"),
+                    "male" => "Male".to_string(),
+                    "female" => "Female".to_string(),
+                    other => format!("Gender: {other}"),
                 });
             }
 
@@ -112,7 +113,7 @@ impl AggregateData {
             };
 
             self.alerts.push(CriticalItem {
-                label: format!("Bệnh nhân: {name}"),
+                label: format!("Patient: {name}"),
                 detail,
                 severity: Severity::Info,
             });
@@ -134,7 +135,7 @@ impl AggregateData {
         {
             if !category.is_empty() {
                 details.push(format!(
-                    "Loại: {}",
+                    "Category: {}",
                     category
                         .into_iter()
                         .map(|s| capitalize_first(s))
@@ -145,11 +146,11 @@ impl AggregateData {
         }
 
         if let Some(reactions) = summarize_reactions(resource) {
-            details.push(format!("Phản ứng: {reactions}"));
+            details.push(format!("Reactions: {reactions}"));
         }
 
         if let Some(criticality) = resource.get("criticality").and_then(Value::as_str) {
-            details.push(format!("Độ nguy kịch: {}", criticality.to_uppercase()));
+            details.push(format!("Criticality: {}", criticality.to_uppercase()));
         }
 
         let recorded_at = extract_datetime(resource, &["recordedDate", "onsetDateTime"]);
@@ -161,7 +162,7 @@ impl AggregateData {
         };
 
         let item = CriticalItem {
-            label: format!("Dị ứng: {label}"),
+            label: format!("Allergy: {label}"),
             detail: detail.clone(),
             severity,
         };
@@ -171,7 +172,7 @@ impl AggregateData {
         self.events.push(TimelineEvent {
             id: resource_id(resource, "allergy"),
             category: EventCategory::Condition,
-            title: format!("Ghi nhận dị ứng với {label}"),
+            title: format!("Allergy documented: {label}"),
             detail,
             occurred_at: recorded_at,
             severity,
@@ -191,7 +192,7 @@ impl AggregateData {
                         .map(str::to_string)
                 })
             })
-            .unwrap_or_else(|| "Thuốc chưa rõ".to_string());
+            .unwrap_or_else(|| "Medication not specified".to_string());
 
         let status = resource
             .get("status")
@@ -205,8 +206,8 @@ impl AggregateData {
             _ => Severity::Moderate,
         };
 
-        let mut details = Vec::new();
-        details.push(format!("Trạng thái: {}", status.to_uppercase()));
+    let mut details = Vec::new();
+    details.push(format!("Status: {}", status.to_uppercase()));
 
         if let Some(reason) = resource
             .get("reasonCode")
@@ -214,7 +215,7 @@ impl AggregateData {
             .and_then(|arr| arr.first())
             .and_then(extract_codeable_text)
         {
-            details.push(format!("Chỉ định: {reason}"));
+            details.push(format!("Indication: {reason}"));
         }
 
         if let Some(dose) = summarize_dosage(resource) {
@@ -234,7 +235,7 @@ impl AggregateData {
         let detail = Some(details.join(" | "));
 
         let item = CriticalItem {
-            label: format!("Thuốc: {medication}"),
+            label: format!("Medication: {medication}"),
             detail: detail.clone(),
             severity,
         };
@@ -269,14 +270,14 @@ impl AggregateData {
 
         let mut details = Vec::new();
         if let Some(status) = extract_status_code(resource.get("clinicalStatus")) {
-            details.push(format!("Trạng thái: {status}"));
+            details.push(format!("Status: {status}"));
         }
         if let Some(severity_text) = extract_status_code(resource.get("severity")) {
-            details.push(format!("Mức độ: {severity_text}"));
+            details.push(format!("Severity: {severity_text}"));
         }
 
         let item = CriticalItem {
-            label: format!("Bệnh mạn: {condition_name}"),
+            label: format!("Chronic condition: {condition_name}"),
             detail: if details.is_empty() {
                 None
             } else {
@@ -318,7 +319,7 @@ impl AggregateData {
                 self.events.push(TimelineEvent {
                     id: resource_id(resource, "code-status"),
                     category: EventCategory::Observation,
-                    title: "Cập nhật code status".to_string(),
+                    title: "Code status updated".to_string(),
                     detail: self.code_status.as_ref().map(|cs| cs.value.clone()),
                     occurred_at: recorded_at,
                     severity,
@@ -347,12 +348,22 @@ impl AggregateData {
         };
 
         if let Some(vital_label) = infer_vital_label(&name) {
+            let (numeric_value, unit) = observation_numeric_metadata(&name, resource, &detail);
             let snapshot = VitalSnapshot {
                 name: vital_label.to_string(),
                 value: detail.clone(),
                 recorded_at,
+                numeric_value,
+                unit: unit.clone(),
             };
             self.upsert_vital(snapshot);
+            self.record_vital_trend(
+                vital_label,
+                recorded_at,
+                numeric_value,
+                detail.clone(),
+                unit,
+            );
         }
 
         self.events.push(event);
@@ -362,7 +373,7 @@ impl AggregateData {
         let name = resource
             .get("code")
             .and_then(extract_codeable_text)
-            .unwrap_or_else(|| "Thủ thuật".to_string());
+            .unwrap_or_else(|| "Procedure".to_string());
         let recorded_at = extract_datetime(resource, &["performedDateTime", "performedPeriod"]);
         let severity = Severity::Moderate;
 
@@ -395,7 +406,7 @@ impl AggregateData {
         self.events.push(TimelineEvent {
             id: resource_id(resource, "encounter"),
             category: EventCategory::Encounter,
-            title: format!("Chăm sóc: {label}"),
+            title: format!("Encounter: {label}"),
             detail: resource
                 .get("reasonCode")
                 .and_then(Value::as_array)
@@ -417,7 +428,7 @@ impl AggregateData {
                     .and_then(Value::as_str)
                     .map(str::to_string)
             })
-            .unwrap_or_else(|| "Tài liệu lâm sàng".to_string());
+            .unwrap_or_else(|| "Clinical document".to_string());
 
         let recorded_at = extract_datetime(resource, &["date", "created"]);
 
@@ -443,16 +454,48 @@ impl AggregateData {
     }
 
     fn upsert_vital(&mut self, snapshot: VitalSnapshot) {
-        match self.vitals.get_mut(&snapshot.name) {
-            Some(existing) => {
+        let key = snapshot.name.clone();
+        match self.vitals.entry(key) {
+            Entry::Occupied(mut entry) => {
+                let existing = entry.get_mut();
                 if is_more_recent(snapshot.recorded_at, existing.recorded_at) {
                     *existing = snapshot;
+                } else {
+                    if existing.unit.is_none() && snapshot.unit.is_some() {
+                        existing.unit = snapshot.unit;
+                    }
+                    if existing.numeric_value.is_none() && snapshot.numeric_value.is_some() {
+                        existing.numeric_value = snapshot.numeric_value;
+                    }
                 }
             }
-            None => {
-                self.vitals.insert(snapshot.name.clone(), snapshot);
+            Entry::Vacant(entry) => {
+                entry.insert(snapshot);
             }
         }
+    }
+
+    fn record_vital_trend(
+        &mut self,
+        label: &str,
+        recorded_at: Option<DateTime<Utc>>,
+        numeric_value: Option<f64>,
+        display: String,
+        unit: Option<String>,
+    ) {
+        let entry = self
+            .vital_trends
+            .entry(label.to_string())
+            .or_insert_with(TrendAccumulator::default);
+
+        entry.push(
+            VitalTrendPoint {
+                recorded_at,
+                value: numeric_value,
+                label: Some(display),
+            },
+            unit,
+        );
     }
 
     fn finalize(mut self, config: &TimelineConfig) -> TimelineSnapshot {
@@ -470,6 +513,24 @@ impl AggregateData {
             .collect();
         vital_values.sort_by(|a, b| b.recorded_at.cmp(&a.recorded_at));
 
+        let mut trends: Vec<VitalTrend> = self
+            .vital_trends
+            .into_iter()
+            .map(|(name, mut acc)| {
+                acc.points.sort_by(|a, b| a.recorded_at.cmp(&b.recorded_at));
+                VitalTrend {
+                    name,
+                    unit: acc.unit,
+                    points: acc.points,
+                }
+            })
+            .collect();
+        trends.sort_by(|a, b| {
+            let a_latest = a.points.iter().filter_map(|p| p.recorded_at).max();
+            let b_latest = b.points.iter().filter_map(|p| p.recorded_at).max();
+            b_latest.cmp(&a_latest)
+        });
+
         let critical = CriticalSummary {
             allergies: self.allergies,
             medications: self.medications,
@@ -477,6 +538,7 @@ impl AggregateData {
             code_status: self.code_status.map(|cs| cs.value),
             alerts: self.alerts,
             recent_vitals: vital_values,
+            vital_trends: trends,
         };
 
         TimelineSnapshot::new(critical, self.events)
@@ -487,6 +549,24 @@ impl AggregateData {
 struct CodeStatusRecord {
     value: String,
     recorded_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Default)]
+struct TrendAccumulator {
+    unit: Option<String>,
+    points: Vec<VitalTrendPoint>,
+}
+
+impl TrendAccumulator {
+    fn push(&mut self, point: VitalTrendPoint, unit: Option<String>) {
+        if self.unit.is_none() && unit.is_some() {
+            self.unit = unit.clone();
+        }
+        if self.unit.is_some() && unit.is_some() && self.unit != unit {
+            // Keep the first unit to maintain a consistent chart.
+        }
+        self.points.push(point);
+    }
 }
 
 fn compute_anchor(entries: &[Value]) -> Option<DateTime<Utc>> {
@@ -684,11 +764,11 @@ fn summarize_dosage(resource: &Value) -> Option<String> {
         .and_then(extract_codeable_text)
         .filter(|s| !s.is_empty())
     {
-        parts.push(format!("Đường dùng: {route}"));
+        parts.push(format!("Route: {route}"));
     }
 
     if let Some(rate) = dosage.get("rateQuantity").and_then(format_quantity_value) {
-        parts.push(format!("Tốc độ: {rate}"));
+        parts.push(format!("Rate: {rate}"));
     }
 
     if parts.is_empty() {
@@ -811,6 +891,34 @@ fn observation_value_text(resource: &Value) -> Option<String> {
     None
 }
 
+fn observation_numeric_metadata(
+    name: &str,
+    resource: &Value,
+    detail: &str,
+) -> (Option<f64>, Option<String>) {
+    if let Some(quantity) = resource.get("valueQuantity") {
+        let value = quantity.get("value").and_then(Value::as_f64);
+        let unit = quantity
+            .get("unit")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        return (value, unit);
+    }
+
+    let lower = name.to_lowercase();
+    if lower.contains("blood pressure") {
+        if let Some((systolic, _)) = parse_blood_pressure_from_detail(detail) {
+            let unit = detail.split_whitespace().skip(1).next().map(str::to_string);
+            return (Some(systolic as f64), unit);
+        }
+    }
+
+    let value = numeric_from_detail(detail);
+    let unit = detail.split_whitespace().skip(1).next().map(str::to_string);
+
+    (value, unit)
+}
+
 fn summarize_observation_value(resource: &Value) -> Option<String> {
     if let Some(quantity) = resource.get("valueQuantity") {
         return format_quantity_value(quantity);
@@ -838,7 +946,7 @@ fn summarize_observation_value(resource: &Value) -> Option<String> {
             let label = component
                 .get("code")
                 .and_then(extract_codeable_text)
-                .unwrap_or_else(|| "Thành phần".to_string());
+                .unwrap_or_else(|| "Component".to_string());
             if let Some(quantity) = component.get("valueQuantity") {
                 if let Some(value) = format_quantity_value(quantity) {
                     parts.push(format!("{label}: {value}"));
@@ -1013,18 +1121,31 @@ fn parse_blood_pressure_from_detail(detail: &str) -> Option<(i32, i32)> {
     None
 }
 
+fn numeric_from_detail(detail: &str) -> Option<f64> {
+    let token = detail.split_whitespace().next()?;
+    let cleaned: String = token
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
+        .collect();
+    if cleaned.is_empty() {
+        None
+    } else {
+        cleaned.parse::<f64>().ok()
+    }
+}
+
 fn infer_vital_label(name: &str) -> Option<&'static str> {
     let lower = name.to_lowercase();
     if lower.contains("heart rate") || lower.contains("pulse") {
-        Some("Mạch")
+        Some("Heart rate")
     } else if lower.contains("spo2") || lower.contains("oxygen saturation") {
         Some("SpO2")
     } else if lower.contains("blood pressure") {
-        Some("HA")
+        Some("Blood pressure")
     } else if lower.contains("respiratory rate") {
-        Some("Nhịp thở")
+        Some("Respiratory rate")
     } else if lower.contains("temperature") {
-        Some("Nhiệt độ")
+        Some("Temperature")
     } else {
         None
     }

@@ -33,6 +33,41 @@ pub enum Severity {
 }
 
 /// Thông tin quan trọng cần hiển thị tức thời.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct VitalTrend {
+    pub name: String,
+    pub unit: Option<String>,
+    pub points: Vec<VitalTrendPoint>,
+}
+
+impl Default for VitalTrend {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            unit: None,
+            points: Vec::new(),
+        }
+    }
+}
+
+/// Một điểm dữ liệu trong biểu đồ chỉ số sống.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct VitalTrendPoint {
+    pub recorded_at: Option<DateTime<Utc>>,
+    pub value: Option<f64>,
+    pub label: Option<String>,
+}
+
+impl Default for VitalTrendPoint {
+    fn default() -> Self {
+        Self {
+            recorded_at: None,
+            value: None,
+            label: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct CriticalSummary {
     pub allergies: Vec<CriticalItem>,
@@ -41,6 +76,8 @@ pub struct CriticalSummary {
     pub code_status: Option<String>,
     pub alerts: Vec<CriticalItem>,
     pub recent_vitals: Vec<VitalSnapshot>,
+    #[serde(default)]
+    pub vital_trends: Vec<VitalTrend>,
 }
 
 /// Mục thông tin trọng yếu (dị ứng, thuốc, cảnh báo).
@@ -57,6 +94,8 @@ pub struct VitalSnapshot {
     pub name: String,
     pub value: String,
     pub recorded_at: Option<DateTime<Utc>>,
+    pub numeric_value: Option<f64>,
+    pub unit: Option<String>,
 }
 
 /// Một sự kiện trong timeline.

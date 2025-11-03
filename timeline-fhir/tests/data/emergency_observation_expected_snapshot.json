@@ -1,0 +1,185 @@
+{
+  "generated_at": "__DYNAMIC_TIMESTAMP__",
+  "critical": {
+    "allergies": [
+      {
+        "label": "Allergy: Penicillin",
+  "detail": "Reactions: Anaphylaxis | Criticality: HIGH",
+        "severity": "critical"
+      }
+    ],
+    "medications": [
+      {
+        "label": "Medication: Norepinephrine infusion",
+        "detail": "Status: ACTIVE | Indication: Shock | Titrated to MAP >65 | Route: Intravenous | Rate: 8 mcg/min",
+        "severity": "high"
+      }
+    ],
+    "chronic_conditions": [
+      {
+        "label": "Chronic condition: Sepsis",
+        "detail": "Status: Active | Severity: Severe",
+        "severity": "critical"
+      }
+    ],
+    "code_status": "DNR / DNI",
+    "alerts": [
+      {
+        "label": "Patient: Jane Doe",
+        "detail": "Age 50 | Female",
+        "severity": "info"
+      }
+    ],
+    "recent_vitals": [
+      {
+        "name": "Heart rate",
+        "value": "128 bpm",
+  "numeric_value": 128.0,
+        "unit": "bpm",
+        "recorded_at": "2025-10-30T12:20:00Z"
+      },
+      {
+        "name": "SpO2",
+        "value": "86 %",
+  "numeric_value": 86.0,
+        "unit": "%",
+        "recorded_at": "2025-10-30T12:18:00Z"
+      },
+      {
+        "name": "Blood pressure",
+        "value": "78/44 mmHg",
+  "numeric_value": 78.0,
+        "unit": "mmHg",
+        "recorded_at": "2025-10-30T12:15:00Z"
+      }
+    ],
+    "vital_trends": [
+      {
+        "name": "Heart rate",
+        "unit": "bpm",
+        "points": [
+          {
+            "recorded_at": "2025-10-30T12:20:00Z",
+            "value": 128.0,
+            "label": "128 bpm"
+          }
+        ]
+      },
+      {
+        "name": "SpO2",
+        "unit": "%",
+        "points": [
+          {
+            "recorded_at": "2025-10-30T12:18:00Z",
+            "value": 86.0,
+            "label": "86 %"
+          }
+        ]
+      },
+      {
+        "name": "Blood pressure",
+        "unit": "mmHg",
+        "points": [
+          {
+            "recorded_at": "2025-10-30T12:15:00Z",
+            "value": 78.0,
+            "label": "78/44 mmHg"
+          }
+        ]
+      }
+    ]
+  },
+  "events": [
+    {
+      "id": "allergy-penicillin",
+      "category": "Condition",
+      "title": "Allergy documented: Penicillin",
+      "detail": "Reactions: Anaphylaxis | Criticality: HIGH",
+      "occurred_at": "2025-10-30T06:40:00Z",
+      "severity": "critical",
+      "source": {
+        "system": "FHIR",
+        "reference": "AllergyIntolerance/allergy-penicillin",
+        "display": "Penicillin"
+      }
+    },
+    {
+      "id": "obs-code-status",
+      "category": "Observation",
+      "title": "Code status updated",
+      "detail": "DNR / DNI",
+      "occurred_at": "2025-10-30T08:05:00Z",
+      "severity": "critical",
+      "source": {
+        "system": "FHIR",
+        "reference": "Observation/obs-code-status",
+        "display": "Code status"
+      }
+    },
+    {
+      "id": "cond-sepsis",
+      "category": "Condition",
+      "title": "Sepsis",
+      "detail": "Status: Active | Severity: Severe",
+      "occurred_at": "2025-10-30T08:45:00Z",
+      "severity": "critical",
+      "source": {
+        "system": "FHIR",
+        "reference": "Condition/cond-sepsis",
+        "display": "Sepsis"
+      }
+    },
+    {
+      "id": "med-norepi",
+      "category": "Medication",
+      "title": "Norepinephrine infusion",
+      "detail": "Status: ACTIVE | Indication: Shock | Titrated to MAP >65 | Route: Intravenous | Rate: 8 mcg/min",
+      "occurred_at": "2025-10-30T09:05:00Z",
+      "severity": "high",
+      "source": {
+        "system": "FHIR",
+        "reference": "MedicationStatement/med-norepi",
+        "display": null
+      }
+    },
+    {
+      "id": "obs-bp",
+      "category": "Observation",
+      "title": "Blood pressure",
+      "detail": "78/44 mmHg",
+      "occurred_at": "2025-10-30T12:15:00Z",
+      "severity": "high",
+      "source": {
+        "system": "FHIR",
+        "reference": "Observation/obs-bp",
+        "display": "Blood pressure"
+      }
+    },
+    {
+      "id": "obs-spo2",
+      "category": "Observation",
+      "title": "SpO2",
+      "detail": "86 %",
+      "occurred_at": "2025-10-30T12:18:00Z",
+      "severity": "high",
+      "source": {
+        "system": "FHIR",
+        "reference": "Observation/obs-spo2",
+        "display": "SpO2"
+      }
+    },
+    {
+      "id": "obs-hr",
+      "category": "Observation",
+      "title": "Heart rate",
+      "detail": "128 bpm",
+      "occurred_at": "2025-10-30T12:20:00Z",
+      "severity": "high",
+      "source": {
+        "system": "FHIR",
+        "reference": "Observation/obs-hr",
+        "display": "Heart rate"
+      }
+    }
+  ]
+}

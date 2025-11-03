@@ -11,18 +11,19 @@ fn fixture_path(name: &str) -> String {
 #[test]
 fn observation_bundle_matches_golden() {
     let bundle = fs::read_to_string(fixture_path("emergency_observation_bundle.json"))
-        .expect("Không đọc được bundle mẫu");
+        .expect("Failed to read sample bundle");
 
     let snapshot =
-        summarize_bundle_str(&bundle, &TimelineConfig::default()).expect("Không tạo được snapshot");
+        summarize_bundle_str(&bundle, &TimelineConfig::default()).expect("Snapshot generation failed");
 
-    let mut actual = serde_json::to_value(snapshot).expect("Không serialize snapshot");
+    let mut actual = serde_json::to_value(snapshot).expect("Snapshot serialization failed");
     normalize_dynamic_fields(&mut actual);
 
-    let expected = fs::read_to_string(fixture_path("emergency_observation_snapshot.json"))
-        .expect("Không đọc được golden snapshot");
+    let expected =
+        fs::read_to_string(fixture_path("emergency_observation_expected_snapshot.json"))
+            .expect("Failed to read golden snapshot");
 
-    let mut expected_value: Value = serde_json::from_str(&expected).expect("Golden không hợp lệ");
+    let mut expected_value: Value = serde_json::from_str(&expected).expect("Invalid golden snapshot");
     normalize_dynamic_fields(&mut expected_value);
 
     assert_eq!(actual, expected_value);
