@@ -5,11 +5,213 @@
     {
       "resource": {
         "resourceType": "Patient",
-        "id": "patient-001",
+        "id": "patient-123",
         "name": [
           {
-            "given": ["John"],
-            "family": "Smith"
+            "given": ["Jane"],
+            "family": "Doe"
+          }
+        ],
+        "gender": "female",
+        "birthDate": "1975-04-18"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Encounter",
+        "id": "enc-1",
+        "class": {
+          "code": "EMER",
+          "display": "Emergency"
+        },
+        "type": [
+          {
+            "text": "ED Visit"
+          }
+        ],
+        "reasonCode": [
+          {
+            "text": "Dyspnea"
+          }
+        ],
+        "period": {
+          "start": "2025-10-30T07:55:00Z"
+        }
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-code-status",
+        "code": {
+          "text": "Code status"
+        },
+        "valueCodeableConcept": {
+          "text": "DNR / DNI"
+        },
+        "effectiveDateTime": "2025-10-30T08:05:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "AllergyIntolerance",
+        "id": "allergy-penicillin",
+        "code": {
+          "text": "Penicillin"
+        },
+        "criticality": "high",
+        "reaction": [
+          {
+            "manifestation": [
+              {
+                "text": "Phản vệ"
+              }
+            ],
+            "severity": "severe"
+          }
+        ],
+        "recordedDate": "2025-10-30T06:40:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "MedicationStatement",
+        "id": "med-norepi",
+        "status": "active",
+        "medicationCodeableConcept": {
+          "text": "Norepinephrine infusion"
+        },
+        "reasonCode": [
+          {
+            "text": "Shock"
+          }
+        ],
+        "effectivePeriod": {
+          "start": "2025-10-30T09:05:00Z"
+        },
+        "dosage": [
+          {
+            "text": "Titrated to MAP >65",
+            "route": {
+              "text": "Intravenous"
+            },
+            "rateQuantity": {
+              "value": 8,
+              "unit": "mcg/min"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "id": "med-levom",
+        "status": "active",
+        "medicationCodeableConcept": {
+          "text": "Levofloxacin 750 mg IV q24h"
+        },
+        "reasonCode": [
+          {
+            "text": "Pneumonia"
+          }
+        ],
+        "authoredOn": "2025-10-30T10:10:00Z",
+        "dosageInstruction": [
+          {
+            "text": "750 mg IV every 24 hours"
+          }
+        ]
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Condition",
+        "id": "cond-sepsis",
+        "code": {
+          "text": "Sepsis due to pneumonia"
+        },
+        "clinicalStatus": {
+          "text": "Active"
+        },
+        "severity": {
+          "text": "Severe"
+        },
+        "recordedDate": "2025-10-30T08:45:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Condition",
+        "id": "cond-copd",
+        "code": {
+          "text": "Chronic obstructive pulmonary disease"
+        },
+        "clinicalStatus": {
+          "text": "Active"
+        },
+        "recordedDate": "2025-09-01T00:00:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-hr",
+        "code": {
+          "text": "Heart rate"
+        },
+        "valueQuantity": {
+          "value": 128,
+          "unit": "bpm"
+        },
+        "interpretation": [
+          {
+            "text": "H"
+          }
+        ],
+        "effectiveDateTime": "2025-10-30T12:20:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-spo2",
+        "code": {
+          "text": "SpO2"
+        },
+        "valueQuantity": {
+          "value": 86,
+          "unit": "%"
+        },
+        "effectiveDateTime": "2025-10-30T12:18:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-bp",
+        "code": {
+          "text": "Blood pressure"
+        },
+        "effectiveDateTime": "2025-10-30T12:15:00Z",
+        "component": [
+          {
+            "code": {
+              "text": "Systolic blood pressure"
+            },
+            "valueQuantity": {
+              "value": 78,
+              "unit": "mmHg"
+            }
+          },
+          {
+            "code": {
+              "text": "Diastolic blood pressure"
+            },
+            "valueQuantity": {
+              "value": 44,
+              "unit": "mmHg"
+            }
           }
         ]
       }
@@ -17,31 +219,54 @@
     {
       "resource": {
         "resourceType": "Observation",
-        "id": "obs-1",
-        "status": "final",
+        "id": "obs-resp",
         "code": {
-          "text": "Heart rate"
+          "text": "Respiratory rate"
         },
         "valueQuantity": {
-          "value": 112,
-          "unit": "bpm"
+          "value": 32,
+          "unit": "breaths/min"
         },
-        "issued": "2025-10-30T12:15:00Z"
+        "effectiveDateTime": "2025-10-30T12:10:00Z"
       }
     },
     {
       "resource": {
         "resourceType": "Observation",
-        "id": "obs-2",
-        "status": "final",
+        "id": "obs-temp",
         "code": {
-          "text": "SpO2"
+          "text": "Temperature"
         },
         "valueQuantity": {
-          "value": 92,
-          "unit": "%"
+          "value": 38.6,
+          "unit": "C"
         },
-        "issued": "2025-10-30T12:10:00Z"
+        "effectiveDateTime": "2025-10-30T11:58:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-lactate",
+        "code": {
+          "text": "Lactate"
+        },
+        "valueQuantity": {
+          "value": 4.3,
+          "unit": "mmol/L"
+        },
+        "effectiveDateTime": "2025-10-30T11:50:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "proc-cvl",
+        "status": "completed",
+        "code": {
+          "text": "Central venous catheter insertion"
+        },
+        "performedDateTime": "2025-10-30T09:30:00Z"
       }
     }
   ]

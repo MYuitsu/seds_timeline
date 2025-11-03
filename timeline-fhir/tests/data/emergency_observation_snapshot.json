@@ -1,44 +1,143 @@
 {
   "generated_at": "__DYNAMIC_TIMESTAMP__",
   "critical": {
-    "allergies": [],
-    "medications": [],
-    "chronic_conditions": [],
-    "code_status": null,
+    "allergies": [
+      {
+        "label": "Dị ứng: Penicillin",
+        "detail": "Phản ứng: Anaphylaxis | Độ nguy kịch: HIGH",
+        "severity": "critical"
+      }
+    ],
+    "medications": [
+      {
+        "label": "Thuốc: Norepinephrine infusion",
+        "detail": "Trạng thái: ACTIVE | Chỉ định: Shock | Titrated to MAP >65 | Đường dùng: Intravenous | Tốc độ: 8 mcg/min",
+        "severity": "high"
+      }
+    ],
+    "chronic_conditions": [
+      {
+        "label": "Bệnh mạn: Sepsis",
+        "detail": "Trạng thái: Active | Mức độ: Severe",
+        "severity": "critical"
+      }
+    ],
+    "code_status": "DNR / DNI",
     "alerts": [
       {
         "label": "Bệnh nhân: Jane Doe",
-        "detail": null,
+        "detail": "50 tuổi | Nữ",
         "severity": "info"
       }
     ],
-    "recent_vitals": []
+    "recent_vitals": [
+      {
+        "name": "Mạch",
+        "value": "128 bpm",
+        "recorded_at": "2025-10-30T12:20:00Z"
+      },
+      {
+        "name": "SpO2",
+        "value": "86 %",
+        "recorded_at": "2025-10-30T12:18:00Z"
+      },
+      {
+        "name": "HA",
+        "value": "78/44 mmHg",
+        "recorded_at": "2025-10-30T12:15:00Z"
+      }
+    ]
   },
   "events": [
     {
-      "id": "obs-1",
-      "category": "Observation",
-      "title": "Heart rate",
-      "detail": "118 bpm",
-      "occurred_at": "2025-10-30T14:25:00Z",
-      "severity": "info",
+      "id": "allergy-penicillin",
+      "category": "Condition",
+      "title": "Ghi nhận dị ứng với Penicillin",
+      "detail": "Phản ứng: Anaphylaxis | Độ nguy kịch: HIGH",
+      "occurred_at": "2025-10-30T06:40:00Z",
+      "severity": "critical",
       "source": {
         "system": "FHIR",
-        "reference": "obs-1",
+        "reference": "AllergyIntolerance/allergy-penicillin",
+        "display": "Penicillin"
+      }
+    },
+    {
+      "id": "obs-code-status",
+      "category": "Observation",
+      "title": "Cập nhật code status",
+      "detail": "DNR / DNI",
+      "occurred_at": "2025-10-30T08:05:00Z",
+      "severity": "critical",
+      "source": {
+        "system": "FHIR",
+        "reference": "Observation/obs-code-status",
+        "display": "Code status"
+      }
+    },
+    {
+      "id": "cond-sepsis",
+      "category": "Condition",
+      "title": "Sepsis",
+      "detail": "Trạng thái: Active | Mức độ: Severe",
+      "occurred_at": "2025-10-30T08:45:00Z",
+      "severity": "critical",
+      "source": {
+        "system": "FHIR",
+        "reference": "Condition/cond-sepsis",
+        "display": "Sepsis"
+      }
+    },
+    {
+      "id": "med-norepi",
+      "category": "Medication",
+      "title": "Norepinephrine infusion",
+      "detail": "Trạng thái: ACTIVE | Chỉ định: Shock | Titrated to MAP >65 | Đường dùng: Intravenous | Tốc độ: 8 mcg/min",
+      "occurred_at": "2025-10-30T09:05:00Z",
+      "severity": "high",
+      "source": {
+        "system": "FHIR",
+        "reference": "MedicationStatement/med-norepi",
         "display": null
       }
     },
     {
-      "id": "obs-2",
+      "id": "obs-bp",
       "category": "Observation",
       "title": "Blood pressure",
-      "detail": "160/95 mmHg",
-      "occurred_at": "2025-10-30T13:45:00Z",
-      "severity": "info",
+      "detail": "78/44 mmHg",
+      "occurred_at": "2025-10-30T12:15:00Z",
+      "severity": "high",
       "source": {
         "system": "FHIR",
-        "reference": "obs-2",
-        "display": null
+        "reference": "Observation/obs-bp",
+        "display": "Blood pressure"
+      }
+    },
+    {
+      "id": "obs-spo2",
+      "category": "Observation",
+      "title": "SpO2",
+      "detail": "86 %",
+      "occurred_at": "2025-10-30T12:18:00Z",
+      "severity": "high",
+      "source": {
+        "system": "FHIR",
+        "reference": "Observation/obs-spo2",
+        "display": "SpO2"
+      }
+    },
+    {
+      "id": "obs-hr",
+      "category": "Observation",
+      "title": "Heart rate",
+      "detail": "128 bpm",
+      "occurred_at": "2025-10-30T12:20:00Z",
+      "severity": "high",
+      "source": {
+        "system": "FHIR",
+        "reference": "Observation/obs-hr",
+        "display": "Heart rate"
       }
     }
   ]

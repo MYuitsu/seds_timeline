@@ -72,7 +72,7 @@ pub struct TimelineEvent {
 }
 
 /// Nhãn phân loại để trình bày timeline.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum EventCategory {
     Encounter,
     Procedure,

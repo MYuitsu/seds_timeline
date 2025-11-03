@@ -11,34 +11,147 @@
             "given": ["Jane"],
             "family": "Doe"
           }
+        ],
+        "gender": "female",
+        "birthDate": "1975-04-18"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-code-status",
+        "code": {
+          "text": "Code status"
+        },
+        "valueCodeableConcept": {
+          "text": "DNR / DNI"
+        },
+        "effectiveDateTime": "2025-10-30T08:05:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "AllergyIntolerance",
+        "id": "allergy-penicillin",
+        "code": {
+          "text": "Penicillin"
+        },
+        "criticality": "high",
+        "reaction": [
+          {
+            "manifestation": [
+              {
+                "text": "Anaphylaxis"
+              }
+            ],
+            "severity": "severe"
+          }
+        ],
+        "recordedDate": "2025-10-30T06:40:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "MedicationStatement",
+        "id": "med-norepi",
+        "status": "active",
+        "medicationCodeableConcept": {
+          "text": "Norepinephrine infusion"
+        },
+        "reasonCode": [
+          {
+            "text": "Shock"
+          }
+        ],
+        "effectivePeriod": {
+          "start": "2025-10-30T09:05:00Z"
+        },
+        "dosage": [
+          {
+            "text": "Titrated to MAP >65",
+            "route": {
+              "text": "Intravenous"
+            },
+            "rateQuantity": {
+              "value": 8,
+              "unit": "mcg/min"
+            }
+          }
         ]
       }
     },
     {
       "resource": {
-        "resourceType": "Observation",
-        "id": "obs-1",
-        "status": "final",
+        "resourceType": "Condition",
+        "id": "cond-sepsis",
         "code": {
-          "text": "Heart rate"
+          "text": "Sepsis"
         },
-        "valueQuantity": {
-          "value": 118,
-          "unit": "bpm"
+        "clinicalStatus": {
+          "text": "Active"
         },
-        "issued": "2025-10-30T14:25:00Z"
+        "severity": {
+          "text": "Severe"
+        },
+        "recordedDate": "2025-10-30T08:45:00Z"
       }
     },
     {
       "resource": {
         "resourceType": "Observation",
-        "id": "obs-2",
-        "status": "final",
+        "id": "obs-hr",
+        "code": {
+          "text": "Heart rate"
+        },
+        "valueQuantity": {
+          "value": 128,
+          "unit": "bpm"
+        },
+        "effectiveDateTime": "2025-10-30T12:20:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-spo2",
+        "code": {
+          "text": "SpO2"
+        },
+        "valueQuantity": {
+          "value": 86,
+          "unit": "%"
+        },
+        "effectiveDateTime": "2025-10-30T12:18:00Z"
+      }
+    },
+    {
+      "resource": {
+        "resourceType": "Observation",
+        "id": "obs-bp",
         "code": {
           "text": "Blood pressure"
         },
-        "valueString": "160/95 mmHg",
-        "issued": "2025-10-30T13:45:00Z"
+        "effectiveDateTime": "2025-10-30T12:15:00Z",
+        "component": [
+          {
+            "code": {
+              "text": "Systolic blood pressure"
+            },
+            "valueQuantity": {
+              "value": 78,
+              "unit": "mmHg"
+            }
+          },
+          {
+            "code": {
+              "text": "Diastolic blood pressure"
+            },
+            "valueQuantity": {
+              "value": 44,
+              "unit": "mmHg"
+            }
+          }
+        ]
       }
     }
   ]
