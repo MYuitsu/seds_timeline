@@ -8,10 +8,10 @@ mod wasm_ui {
     use crate::styles;
     use chrono::{DateTime, Duration, NaiveDate, Utc};
     use serde_wasm_bindgen::from_value;
-    use std::cmp::Ordering;
+    use std::{cmp::Ordering, collections::{BTreeMap, HashSet}};
     use timeline_core::{
-        CriticalItem, CriticalSummary, EventCategory, Severity, TimelineEvent, TimelineSnapshot,
-        VitalSnapshot, VitalTrend,
+        CriticalItem, CriticalSummary, DiagnosticKind, DiagnosticSnapshot, EventCategory, Severity,
+        TimelineEvent, TimelineSnapshot, VitalSnapshot, VitalTrend,
     };
     use wasm_bindgen::prelude::*;
     use web_sys::{console, Document, Element, HtmlInputElement, Window};
@@ -19,10 +19,79 @@ mod wasm_ui {
     use yew::prelude::*;
     use yew::TargetCast;
 
+    const VITAL_EVENT_KEYWORDS: &[&str] = &[
+        "heart rate",
+        "blood pressure",
+        "respiratory rate",
+        "spo2",
+        "oxygen saturation",
+        "temperature",
+        "pulse",
+    ];
+
+    const LAB_EVENT_KEYWORDS: &[&str] = &[
+        "lactate",
+        "troponin",
+        "culture",
+        "panel",
+        "cbc",
+        "chemistry",
+        "creatinine",
+        "glucose",
+        "magnesium",
+        "blood gas",
+    ];
+
+    const IMAGING_EVENT_KEYWORDS: &[&str] = &[
+        "ct",
+        "mri",
+        "x-ray",
+        "xray",
+        "ultrasound",
+        "radiograph",
+    ];
+
     #[derive(Clone, Default, PartialEq)]
     struct FilterState {
         severity: Option<Severity>,
         query: String,
+    }
+
+    #[derive(Debug, Default, Clone, Copy)]
+    struct SeverityCounts {
+        total: usize,
+        critical: usize,
+        high: usize,
+        moderate: usize,
+        low: usize,
+        info: usize,
+    }
+
+    #[derive(Clone, Copy, PartialEq)]
+    enum CardVariant {
+        Neutral,
+        Alert,
+        Allergy,
+        Medication,
+        Condition,
+        Vitals,
+        Diagnostics,
+        Insights,
+    }
+
+    impl CardVariant {
+        fn data_attr(self) -> &'static str {
+            match self {
+                CardVariant::Neutral => "neutral",
+                CardVariant::Alert => "alert",
+                CardVariant::Allergy => "allergy",
+                CardVariant::Medication => "medication",
+                CardVariant::Condition => "condition",
+                CardVariant::Vitals => "vitals",
+                CardVariant::Diagnostics => "diagnostics",
+                CardVariant::Insights => "insights",
+            }
+        }
     }
 
     #[derive(Properties, PartialEq)]
@@ -47,6 +116,8 @@ mod wasm_ui {
 
         let filters = use_state(FilterState::default);
         let filters_value = (*filters).clone();
+        let expanded_groups = use_state(|| HashSet::<String>::new());
+        let expanded_snapshot = (*expanded_groups).clone();
         let mut filtered_events: Vec<&TimelineEvent> = snapshot
             .events
             .iter()
@@ -56,6 +127,10 @@ mod wasm_ui {
         filtered_events.sort_by(|a, b| compare_datetimes(b.occurred_at, a.occurred_at));
 
         let grouped_events = group_events_by_day(&filtered_events);
+        let severity_counts = tally_severity(&filtered_events);
+        let event_count_label = format_event_count(&severity_counts);
+        let snapshot_recency = format_relative_time(Some(snapshot.generated_at))
+            .unwrap_or_else(|| "just now".to_string());
 
         let on_search = {
             let filters = filters.clone();
@@ -76,17 +151,24 @@ mod wasm_ui {
 
         let severity_controls = render_severity_filters(filters.clone());
 
-        let event_count_label = match filtered_events.len() {
-            1 => "1 event".to_string(),
-            count => format!("{count} events"),
-        };
-
         let events_view = if filtered_events.is_empty() {
             html! { <li class="timeline-empty">{"No events match the current filters."}</li> }
         } else {
             html! {
                 <>
-                    { for grouped_events.into_iter().map(|(label, events)| render_event_group(label, events)) }
+                    { for grouped_events.into_iter().enumerate().map(|(index, (label, events))| {
+                        let key = group_storage_key(&label, &events);
+                        let default_collapsed = should_collapse_group(index, &label, &events);
+                        let is_expanded = expanded_snapshot.contains(&key) || !default_collapsed;
+                        render_event_group(
+                            label,
+                            events,
+                            key,
+                            is_expanded,
+                            default_collapsed,
+                            expanded_groups.clone(),
+                        )
+                    }) }
                 </>
             }
         };
@@ -97,16 +179,17 @@ mod wasm_ui {
                     <header class="critical-header">
                         <span class="critical-eyebrow">{"Emergency status"}</span>
                         <h2>{"Priority information"}</h2>
-                        <p>{"Key items for the ED team."}</p>
+                        <p class="critical-subhead">{ format!("Snapshot generated {snapshot_recency}") }</p>
                     </header>
                     { render_code_status(&snapshot.critical) }
-                    { render_critical_card("Clinical alerts", &snapshot.critical.alerts, "No urgent alerts." ) }
-                    { render_critical_card("Severe allergies", &snapshot.critical.allergies, "No high-risk allergies recorded.") }
-                    { render_critical_card("Active medications", &snapshot.critical.medications, "No active medications." ) }
-                    { render_critical_card("High-risk chronic conditions", &snapshot.critical.chronic_conditions, "No high-risk chronic conditions recorded.") }
-                    { render_vitals(&snapshot.critical.recent_vitals) }
-                    { render_vital_trends(&snapshot.critical) }
                     { render_trend_insights(&snapshot.critical) }
+                    { render_vitals(&snapshot.critical.recent_vitals) }
+                    { render_diagnostics(&snapshot.critical) }
+                    { render_vital_trends(&snapshot.critical) }
+                    { render_critical_card("Clinical alerts", &snapshot.critical.alerts, "No urgent alerts.", CardVariant::Alert ) }
+                    { render_critical_card("Severe allergies", &snapshot.critical.allergies, "No high-risk allergies recorded.", CardVariant::Allergy) }
+                    { render_critical_card("Active medications", &snapshot.critical.medications, "No active medications.", CardVariant::Medication ) }
+                    { render_critical_card("High-risk chronic conditions", &snapshot.critical.chronic_conditions, "No high-risk chronic conditions recorded.", CardVariant::Condition) }
                 </aside>
                 <section class="timeline-column" aria-live="polite">
                     { render_hot_strip(&snapshot.events) }
@@ -121,7 +204,10 @@ mod wasm_ui {
                             <span class="toolbar-label">{"Filters"}</span>
                             { severity_controls }
                         </div>
-                        <span class="toolbar-count">{ event_count_label }</span>
+                        <div class="toolbar-summary">
+                            <span class="toolbar-count">{ event_count_label }</span>
+                            { build_severity_badges(&severity_counts) }
+                        </div>
                         <div class="toolbar-search">
                             <input
                                 type="search"
@@ -146,6 +232,72 @@ mod wasm_ui {
         path: String,
         last_x: f64,
         last_y: f64,
+    }
+
+    fn tally_severity(events: &[&TimelineEvent]) -> SeverityCounts {
+        let mut counts = SeverityCounts::default();
+
+        for event in events {
+            counts.total += 1;
+            match event.severity {
+                Severity::Critical => counts.critical += 1,
+                Severity::High => counts.high += 1,
+                Severity::Moderate => counts.moderate += 1,
+                Severity::Low => counts.low += 1,
+                Severity::Info => counts.info += 1,
+            }
+        }
+
+        counts
+    }
+
+    fn format_event_count(counts: &SeverityCounts) -> String {
+        match counts.total {
+            0 => "No events in view".to_string(),
+            1 => "1 event".to_string(),
+            total => {
+                if counts.critical > 0 {
+                    format!("{total} events ({} critical)", counts.critical)
+                } else if counts.high > 0 {
+                    format!("{total} events ({} high severity)", counts.high)
+                } else if counts.moderate > 0 {
+                    format!("{total} events ({} moderate)", counts.moderate)
+                } else if counts.low > 0 {
+                    format!("{total} events ({} low)", counts.low)
+                } else {
+                    format!("{total} events")
+                }
+            }
+        }
+    }
+
+    fn build_severity_badges(counts: &SeverityCounts) -> Html {
+        let entries = [
+            (Severity::Critical, counts.critical),
+            (Severity::High, counts.high),
+            (Severity::Moderate, counts.moderate),
+            (Severity::Low, counts.low),
+            (Severity::Info, counts.info),
+        ];
+
+        if counts.total == 0 {
+            return Html::default();
+        }
+
+        html! {
+            <ul class="severity-summary" aria-label="Events by severity">
+                {
+                    for entries.into_iter().filter(|(_, count)| *count > 0).map(|(severity, count)| {
+                        html! {
+                            <li class="severity-summary-item" data-level={severity_level(severity)}>
+                                <span class="severity-summary-label">{ severity_label(severity) }</span>
+                                <span class="severity-summary-count">{ count }</span>
+                            </li>
+                        }
+                    })
+                }
+            </ul>
+        }
     }
 
     fn render_severity_filters(filters: UseStateHandle<FilterState>) -> Html {
@@ -189,9 +341,14 @@ mod wasm_ui {
         }
     }
 
-    fn render_critical_card(title: &str, items: &[CriticalItem], empty_label: &str) -> Html {
+    fn render_critical_card(
+        title: &str,
+        items: &[CriticalItem],
+        empty_label: &str,
+        variant: CardVariant,
+    ) -> Html {
         html! {
-            <section class="critical-card">
+            <section class="critical-card" data-variant={variant.data_attr()}>
                 <header>
                     <h3>{ title }</h3>
                     <span class="critical-count">{ items.len() }</span>
@@ -215,10 +372,15 @@ mod wasm_ui {
             None => ("Not documented".to_string(), "warning", "Needs update"),
         };
 
+        let icon = if status_level == "affirm" { "✓" } else { "!" };
+
         html! {
-            <section class="critical-card code-status">
+            <section class="critical-card code-status" data-variant="code-status">
                 <header>
-                    <h3>{"Code status"}</h3>
+                    <div class="code-status-heading">
+                        <span class="code-status-icon" data-level={status_level} aria-hidden="true">{ icon }</span>
+                        <h3>{"Code status"}</h3>
+                    </div>
                     <span class="critical-pill" data-level={status_level}>{ helper_text }</span>
                 </header>
                 <p class="code-status-value" data-level={status_level}>{ status_text }</p>
@@ -228,7 +390,7 @@ mod wasm_ui {
 
     fn render_vitals(vitals: &[VitalSnapshot]) -> Html {
         html! {
-            <section class="critical-card">
+            <section class="critical-card" data-variant={CardVariant::Vitals.data_attr()}>
                 <header>
                     <h3>{"Recent vital signs"}</h3>
                     <span class="critical-count">{ vitals.len() }</span>
@@ -252,7 +414,7 @@ mod wasm_ui {
         }
 
         html! {
-            <section class="critical-card trend-card">
+            <section class="critical-card trend-card" data-variant={CardVariant::Vitals.data_attr()}>
                 <header>
                     <h3>{"Vital trends"}</h3>
                     <span class="critical-count">{ summary.vital_trends.len() }</span>
@@ -261,6 +423,79 @@ mod wasm_ui {
                     { for summary.vital_trends.iter().map(render_trend_item) }
                 </ul>
             </section>
+        }
+    }
+
+    fn render_diagnostics(summary: &CriticalSummary) -> Html {
+        let labs: Vec<&DiagnosticSnapshot> = summary
+            .recent_diagnostics
+            .iter()
+            .filter(|item| matches!(item.kind, DiagnosticKind::Lab))
+            .collect();
+
+        let imaging: Vec<&DiagnosticSnapshot> = summary
+            .recent_diagnostics
+            .iter()
+            .filter(|item| matches!(item.kind, DiagnosticKind::Imaging))
+            .collect();
+
+        if labs.is_empty() && imaging.is_empty() {
+            return Html::default();
+        }
+
+        let total = labs.len() + imaging.len();
+        let labs_html = if labs.is_empty() {
+            Html::default()
+        } else {
+            render_diagnostic_group("Labs", labs)
+        };
+        let imaging_html = if imaging.is_empty() {
+            Html::default()
+        } else {
+            render_diagnostic_group("Imaging", imaging)
+        };
+
+        html! {
+            <section class="critical-card diagnostics-card" data-variant={CardVariant::Diagnostics.data_attr()}>
+                <header>
+                    <h3>{"Recent diagnostics"}</h3>
+                    <span class="critical-count">{ total }</span>
+                </header>
+                <div class="diagnostic-groups">
+                    { labs_html }
+                    { imaging_html }
+                </div>
+            </section>
+        }
+    }
+
+    fn render_diagnostic_group(label: &str, items: Vec<&DiagnosticSnapshot>) -> Html {
+        html! {
+            <div class="diagnostic-group">
+                <h4>{ label }</h4>
+                <ul class="diagnostic-list">
+                    { for items.into_iter().map(render_diagnostic_item) }
+                </ul>
+            </div>
+        }
+    }
+
+    fn render_diagnostic_item(item: &DiagnosticSnapshot) -> Html {
+        let severity_level = severity_level(item.severity);
+        let severity_label = severity_label(item.severity);
+        let relative = format_relative_time(item.recorded_at);
+
+        html! {
+            <li class="diagnostic-item">
+                <div class="diagnostic-header">
+                    <span class="diagnostic-name">{ item.name.clone() }</span>
+                    <span class="severity-badge" data-level={severity_level}>{ severity_label }</span>
+                </div>
+                <div class="diagnostic-value">{ item.value.clone() }</div>
+                <div class="diagnostic-meta">
+                    { relative.map(|text| html! { <span>{ text }</span> }).unwrap_or_default() }
+                </div>
+            </li>
         }
     }
 
@@ -287,19 +522,18 @@ mod wasm_ui {
             }
 
             let direction = if delta > 0.0 { "up" } else { "down" };
-            let verb = if delta > 0.0 {
-                "Increased"
-            } else {
-                "Decreased"
-            };
-
+            let arrow = if delta > 0.0 { "↑" } else { "↓" };
             let unit_suffix = trend.unit.as_deref().unwrap_or("");
             let change_value = format_numeric(delta.abs());
-            let change_text = if unit_suffix.is_empty() {
-                format!("{verb} by {change_value}")
+            let change_summary = if unit_suffix.is_empty() {
+                format!("{arrow}{change_value}")
             } else {
-                format!("{verb} by {change_value} {unit_suffix}")
+                format!("{arrow}{change_value} {unit_suffix}")
             };
+
+            let span_text = format_duration_span(first_point.recorded_at, last_point.recorded_at)
+                .unwrap_or_else(|| "recent readings".to_string());
+            let change_text = format!("{change_summary} in {span_text}");
 
             let start_label = first_point
                 .label
@@ -309,15 +543,19 @@ mod wasm_ui {
                 .label
                 .clone()
                 .unwrap_or_else(|| format_measurement(last_value, trend.unit.as_deref()));
-            let detail_text = format!("{start_label} -> {end_label}");
+            let detail_text = format!("{start_label} → {end_label}");
 
             let range_text = format_time_range(first_point.recorded_at, last_point.recorded_at);
             let relative_text = format_relative_time(last_point.recorded_at);
 
             items.push(html! {
                 <li class="insight-item" data-trend={direction}>
-                    <div class="insight-title">{ trend.name.clone() }</div>
-                    <div class="insight-change">{ change_text }{": "}{ detail_text }</div>
+                    <div class="insight-header">
+                        <span class="insight-arrow" aria-hidden="true">{ arrow }</span>
+                        <span class="insight-name">{ trend.name.clone() }</span>
+                    </div>
+                    <div class="insight-change">{ change_text }</div>
+                    <div class="insight-detail">{ detail_text }</div>
                     <div class="insight-meta">
                         {
                             range_text
@@ -326,7 +564,7 @@ mod wasm_ui {
                         }
                         {
                             relative_text
-                                .map(|text| html! { <span class="insight-relative">{ text }</span> })
+                                .map(|text| html! { <span class="insight-relative">{ format!("Last recorded {text}") }</span> })
                                 .unwrap_or_default()
                         }
                     </div>
@@ -338,7 +576,7 @@ mod wasm_ui {
             Html::default()
         } else {
             html! {
-                <section class="critical-card insights-card">
+                <section class="critical-card insights-card" data-variant={CardVariant::Insights.data_attr()}>
                     <header>
                         <h3>{"Trend insights"}</h3>
                         <span class="critical-count">{ items.len() }</span>
@@ -468,6 +706,43 @@ mod wasm_ui {
         Some(format!("Δ {formatted}{unit_suffix}"))
     }
 
+    fn format_duration_span(
+        start: Option<DateTime<Utc>>,
+        end: Option<DateTime<Utc>>,
+    ) -> Option<String> {
+        let start = start?;
+        let end = end?;
+        let mut delta = end.signed_duration_since(start);
+        if delta.num_seconds().abs() < 1 {
+            return Some("moments".to_string());
+        }
+
+        if delta.num_seconds() < 0 {
+            delta = -delta;
+        }
+
+        let total_minutes = delta.num_minutes();
+        if total_minutes < 1 {
+            return Some("moments".to_string());
+        }
+
+        let hours = total_minutes / 60;
+        let minutes = total_minutes % 60;
+        let mut parts = Vec::new();
+
+        if hours > 0 {
+            let unit = if hours == 1 { "hour" } else { "hours" };
+            parts.push(format!("{hours} {unit}"));
+        }
+
+        if minutes > 0 {
+            let unit = if minutes == 1 { "minute" } else { "minutes" };
+            parts.push(format!("{minutes} {unit}"));
+        }
+
+        Some(parts.join(" "))
+    }
+
     fn format_time_range(
         start: Option<DateTime<Utc>>,
         end: Option<DateTime<Utc>>,
@@ -586,15 +861,60 @@ mod wasm_ui {
         }
     }
 
-    fn render_event_group(label: String, events: Vec<&TimelineEvent>) -> Html {
-        html! {
-            <li class="timeline-group">
-                <div class="timeline-group-header">
-                    <span>{ label }</span>
-                </div>
+    fn render_event_group(
+        label: String,
+        events: Vec<&TimelineEvent>,
+        key: String,
+        is_expanded: bool,
+        default_collapsed: bool,
+        expanded_groups: UseStateHandle<HashSet<String>>,
+    ) -> Html {
+        let summary = summarize_group(&events);
+        let toggle_key = key.clone();
+        let toggle_handle = expanded_groups.clone();
+        let toggle = Callback::from(move |_| {
+            let mut next = (*toggle_handle).clone();
+            if next.contains(&toggle_key) {
+                next.remove(&toggle_key);
+            } else {
+                next.insert(toggle_key.clone());
+            }
+            toggle_handle.set(next);
+        });
+
+        let toggle_button = if default_collapsed {
+            let label_text = if is_expanded { "Collapse" } else { "Expand" };
+            html! {
+                <button
+                    type="button"
+                    class="group-toggle"
+                    onclick={toggle}
+                    aria-expanded={is_expanded.to_string()}
+                >
+                    { label_text }
+                </button>
+            }
+        } else {
+            Html::default()
+        };
+
+        let body = if !is_expanded && default_collapsed {
+            html! { <div class="timeline-group-summary">{ summary }</div> }
+        } else {
+            html! {
                 <ul>
                     { for events.into_iter().map(render_event) }
                 </ul>
+            }
+        };
+
+        html! {
+            <li class="timeline-group" data-group-key={key}>
+                <div class="timeline-group-header">
+                    <span>{ label }</span>
+                    { toggle_button }
+                </div>
+                { body }
             </li>
         }
     }
@@ -645,6 +965,100 @@ mod wasm_ui {
                 <span class="timeline-source-system">{ system }</span>
                 <span class="timeline-source-display">{ display }</span>
             </div>
+        }
+    }
+
+    fn group_storage_key(label: &str, events: &[&TimelineEvent]) -> String {
+        let first_id = events
+            .first()
+            .map(|event| event.id.as_str())
+            .unwrap_or("");
+        format!("{label}-{first_id}")
+    }
+
+    fn should_collapse_group(index: usize, label: &str, events: &[&TimelineEvent]) -> bool {
+        if index == 0 || events.len() <= 2 {
+            return false;
+        }
+
+        label != "Today" && label != "Yesterday"
+    }
+
+    fn summarize_group(events: &[&TimelineEvent]) -> String {
+        let mut counts: BTreeMap<&'static str, usize> = BTreeMap::new();
+
+        for event in events {
+            let bucket = categorize_event_for_summary(event);
+            *counts.entry(bucket).or_insert(0) += 1;
+        }
+
+        let mut phrases: Vec<String> = counts
+            .into_iter()
+            .map(|(bucket, count)| format_bucket_phrase(bucket, count))
+            .collect();
+        phrases.sort();
+        phrases.join(", ")
+    }
+
+    fn categorize_event_for_summary(event: &TimelineEvent) -> &'static str {
+        match event.category {
+            EventCategory::Observation => {
+                let title = event.title.to_lowercase();
+                if is_vital_title(&title) {
+                    "Vitals"
+                } else if is_imaging_title(&title) {
+                    "Imaging"
+                } else if is_lab_title(&title) {
+                    "Labs"
+                } else {
+                    "Observations"
+                }
+            }
+            EventCategory::Medication => "Medications",
+            EventCategory::Condition => "Conditions",
+            EventCategory::Procedure => "Procedures",
+            EventCategory::Encounter => "Encounters",
+            EventCategory::Document => "Documents",
+            EventCategory::Note => "Notes",
+            EventCategory::Other => "Events",
+        }
+    }
+
+    fn is_vital_title(title: &str) -> bool {
+        VITAL_EVENT_KEYWORDS.iter().any(|keyword| title.contains(keyword))
+    }
+
+    fn is_lab_title(title: &str) -> bool {
+        LAB_EVENT_KEYWORDS.iter().any(|keyword| title.contains(keyword))
+    }
+
+    fn is_imaging_title(title: &str) -> bool {
+        IMAGING_EVENT_KEYWORDS
+            .iter()
+            .any(|keyword| title.split_whitespace().any(|token| token == *keyword))
+    }
+
+    fn format_bucket_phrase(bucket: &str, count: usize) -> String {
+        match bucket {
+            "Vitals" => pluralize(count, "vital", "vitals"),
+            "Labs" => pluralize(count, "lab", "labs"),
+            "Imaging" => pluralize(count, "study", "studies"),
+            "Observations" => pluralize(count, "observation", "observations"),
+            "Medications" => pluralize(count, "medication", "medications"),
+            "Conditions" => pluralize(count, "condition", "conditions"),
+            "Procedures" => pluralize(count, "procedure", "procedures"),
+            "Encounters" => pluralize(count, "encounter", "encounters"),
+            "Documents" => pluralize(count, "document", "documents"),
+            "Notes" => pluralize(count, "note", "notes"),
+            _ => pluralize(count, "event", "events"),
+        }
+    }
+
+    fn pluralize(count: usize, singular: &str, plural: &str) -> String {
+        if count == 1 {
+            format!("1 {singular}")
+        } else {
+            format!("{count} {plural}")
         }
     }
 

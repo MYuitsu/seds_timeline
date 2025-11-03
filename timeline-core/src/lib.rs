@@ -68,6 +68,39 @@ impl Default for VitalTrendPoint {
     }
 }
 
+/// Kết quả xét nghiệm hoặc chẩn đoán hình ảnh gần nhất.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DiagnosticSnapshot {
+    pub name: String,
+    pub value: String,
+    pub recorded_at: Option<DateTime<Utc>>,
+    pub severity: Severity,
+    pub kind: DiagnosticKind,
+    pub unit: Option<String>,
+}
+
+impl Default for DiagnosticSnapshot {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            value: String::new(),
+            recorded_at: None,
+            severity: Severity::Info,
+            kind: DiagnosticKind::Lab,
+            unit: None,
+        }
+    }
+}
+
+/// Phân loại dữ liệu chẩn đoán.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum DiagnosticKind {
+    Lab,
+    Imaging,
+    Other,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct CriticalSummary {
     pub allergies: Vec<CriticalItem>,
@@ -78,6 +111,8 @@ pub struct CriticalSummary {
     pub recent_vitals: Vec<VitalSnapshot>,
     #[serde(default)]
     pub vital_trends: Vec<VitalTrend>,
+    #[serde(default)]
+    pub recent_diagnostics: Vec<DiagnosticSnapshot>,
 }
 
 /// Mục thông tin trọng yếu (dị ứng, thuốc, cảnh báo).

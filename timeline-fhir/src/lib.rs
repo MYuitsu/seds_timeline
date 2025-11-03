@@ -5,8 +5,9 @@ use std::collections::{hash_map::Entry, HashMap};
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use serde_json::Value;
 use timeline_core::{
-    CriticalItem, CriticalSummary, EventCategory, ResourceReference, Severity, TimelineConfig,
-    TimelineError, TimelineEvent, TimelineSnapshot, VitalSnapshot, VitalTrend, VitalTrendPoint,
+    CriticalItem, CriticalSummary, DiagnosticKind, DiagnosticSnapshot, EventCategory,
+    ResourceReference, Severity, TimelineConfig, TimelineError, TimelineEvent, TimelineSnapshot,
+    VitalSnapshot, VitalTrend, VitalTrendPoint,
 };
 
 /// Summarize timeline data from a JSON string.
@@ -79,6 +80,7 @@ struct AggregateData {
     code_status: Option<CodeStatusRecord>,
     vitals: HashMap<String, VitalSnapshot>,
     vital_trends: HashMap<String, TrendAccumulator>,
+    diagnostics: HashMap<String, DiagnosticSnapshot>,
     events: Vec<TimelineEvent>,
 }
 
@@ -126,7 +128,7 @@ impl AggregateData {
         };
 
         let severity = map_allergy_severity(resource);
-        let mut details = Vec::new();
+        let mut phrases = Vec::new();
 
         if let Some(category) = resource
             .get("category")
@@ -134,8 +136,8 @@ impl AggregateData {
             .map(|arr| arr.iter().filter_map(Value::as_str).collect::<Vec<_>>())
         {
             if !category.is_empty() {
-                details.push(format!(
-                    "Category: {}",
+                phrases.push(format!(
+                    "Category: {}.",
                     category
                         .into_iter()
                         .map(|s| capitalize_first(s))
@@ -146,19 +148,19 @@ impl AggregateData {
         }
 
         if let Some(reactions) = summarize_reactions(resource) {
-            details.push(format!("Reactions: {reactions}"));
+            phrases.push(format!("Reaction: {reactions}."));
         }
 
         if let Some(criticality) = resource.get("criticality").and_then(Value::as_str) {
-            details.push(format!("Criticality: {}", criticality.to_uppercase()));
+            phrases.push(format!("Criticality {}.", criticality.to_uppercase()));
         }
 
         let recorded_at = extract_datetime(resource, &["recordedDate", "onsetDateTime"]);
 
-        let detail = if details.is_empty() {
+        let detail = if phrases.is_empty() {
             None
         } else {
-            Some(details.join(" | "))
+            Some(phrases.join(" "))
         };
 
         let item = CriticalItem {
@@ -206,8 +208,17 @@ impl AggregateData {
             _ => Severity::Moderate,
         };
 
-    let mut details = Vec::new();
-    details.push(format!("Status: {}", status.to_uppercase()));
+        let mut phrases = Vec::new();
+        let status_phrase = match status {
+            "active" => Some("Active medication.".to_string()),
+            "intended" => Some("Planned therapy.".to_string()),
+            "completed" => Some("Course completed.".to_string()),
+            "on-hold" => Some("Therapy on hold.".to_string()),
+            other => Some(format!("Status {other}.")),
+        };
+        if let Some(phrase) = status_phrase {
+            phrases.push(phrase);
+        }
 
         if let Some(reason) = resource
             .get("reasonCode")
@@ -215,11 +226,11 @@ impl AggregateData {
             .and_then(|arr| arr.first())
             .and_then(extract_codeable_text)
         {
-            details.push(format!("Indication: {reason}"));
+            phrases.push(format!("Indication: {reason}."));
         }
 
-        if let Some(dose) = summarize_dosage(resource) {
-            details.push(dose);
+        if let Some(dose_phrases) = summarize_dosage(resource) {
+            phrases.extend(dose_phrases);
         }
 
         let recorded_at = extract_datetime(
@@ -232,7 +243,11 @@ impl AggregateData {
             ],
         );
 
-        let detail = Some(details.join(" | "));
+        let detail = if phrases.is_empty() {
+            None
+        } else {
+            Some(phrases.join(" "))
+        };
 
         let item = CriticalItem {
             label: format!("Medication: {medication}"),
@@ -268,20 +283,20 @@ impl AggregateData {
 
         let severity = map_condition_severity(&condition_name);
 
-        let mut details = Vec::new();
+        let mut phrases = Vec::new();
         if let Some(status) = extract_status_code(resource.get("clinicalStatus")) {
-            details.push(format!("Status: {status}"));
+            phrases.push(format!("Status {status}."));
         }
         if let Some(severity_text) = extract_status_code(resource.get("severity")) {
-            details.push(format!("Severity: {severity_text}"));
+            phrases.push(format!("Severity {severity_text}."));
         }
 
         let item = CriticalItem {
             label: format!("Chronic condition: {condition_name}"),
-            detail: if details.is_empty() {
+            detail: if phrases.is_empty() {
                 None
             } else {
-                Some(details.join(" | "))
+                Some(phrases.join(" "))
             },
             severity,
         };
@@ -364,6 +379,17 @@ impl AggregateData {
                 detail.clone(),
                 unit,
             );
+        } else if let Some(kind) = guess_diagnostic_kind(&name, resource) {
+            let (_, unit) = observation_numeric_metadata(&name, resource, &detail);
+            let snapshot = DiagnosticSnapshot {
+                name: name.clone(),
+                value: detail.clone(),
+                recorded_at,
+                severity,
+                kind,
+                unit,
+            };
+            self.upsert_diagnostic(snapshot);
         }
 
         self.events.push(event);
@@ -475,6 +501,21 @@ impl AggregateData {
         }
     }
 
+    fn upsert_diagnostic(&mut self, snapshot: DiagnosticSnapshot) {
+        let key = snapshot.name.clone();
+        match self.diagnostics.entry(key) {
+            Entry::Occupied(mut entry) => {
+                let existing = entry.get_mut();
+                if is_more_recent(snapshot.recorded_at, existing.recorded_at) {
+                    *existing = snapshot;
+                }
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(snapshot);
+            }
+        }
+    }
+
     fn record_vital_trend(
         &mut self,
         label: &str,
@@ -531,6 +572,9 @@ impl AggregateData {
             b_latest.cmp(&a_latest)
         });
 
+        let mut diagnostics: Vec<DiagnosticSnapshot> = self.diagnostics.into_values().collect();
+        diagnostics.sort_by(|a, b| b.recorded_at.cmp(&a.recorded_at));
+
         let critical = CriticalSummary {
             allergies: self.allergies,
             medications: self.medications,
@@ -539,6 +583,7 @@ impl AggregateData {
             alerts: self.alerts,
             recent_vitals: vital_values,
             vital_trends: trends,
+            recent_diagnostics: diagnostics,
         };
 
         TimelineSnapshot::new(critical, self.events)
@@ -751,12 +796,15 @@ fn map_allergy_severity(resource: &Value) -> Severity {
     Severity::Moderate
 }
 
-fn summarize_dosage(resource: &Value) -> Option<String> {
+fn summarize_dosage(resource: &Value) -> Option<Vec<String>> {
     let dosage = resource.get("dosage")?.as_array()?.first()?;
-    let mut parts = Vec::new();
+    let mut phrases = Vec::new();
 
     if let Some(text) = dosage.get("text").and_then(Value::as_str) {
-        parts.push(text.trim().to_string());
+        let cleaned = text.trim().trim_end_matches('.').to_string();
+        if !cleaned.is_empty() {
+            phrases.push(format!("{cleaned}."));
+        }
     }
 
     if let Some(route) = dosage
@@ -764,17 +812,17 @@ fn summarize_dosage(resource: &Value) -> Option<String> {
         .and_then(extract_codeable_text)
         .filter(|s| !s.is_empty())
     {
-        parts.push(format!("Route: {route}"));
+        phrases.push(format!("Administer via {route}."));
     }
 
     if let Some(rate) = dosage.get("rateQuantity").and_then(format_quantity_value) {
-        parts.push(format!("Rate: {rate}"));
+        phrases.push(format!("Rate {rate}."));
     }
 
-    if parts.is_empty() {
+    if phrases.is_empty() {
         None
     } else {
-        Some(parts.join(" | "))
+        Some(phrases)
     }
 }
 
@@ -1150,6 +1198,100 @@ fn infer_vital_label(name: &str) -> Option<&'static str> {
         None
     }
 }
+
+fn guess_diagnostic_kind(name: &str, resource: &Value) -> Option<DiagnosticKind> {
+    if observation_category_matches(resource, "vital") {
+        return None;
+    }
+
+    if observation_category_matches(resource, "laboratory")
+        || observation_category_matches(resource, "lab")
+    {
+        return Some(DiagnosticKind::Lab);
+    }
+
+    if observation_category_matches(resource, "imaging")
+        || observation_category_matches(resource, "radiology")
+    {
+        return Some(DiagnosticKind::Imaging);
+    }
+
+    let normalized_tokens = tokenize(name);
+
+    if normalized_tokens
+        .iter()
+        .any(|token| LAB_KEYWORDS.iter().any(|kw| token.contains(kw)))
+    {
+        return Some(DiagnosticKind::Lab);
+    }
+
+    if normalized_tokens
+        .iter()
+        .any(|token| IMAGING_KEYWORDS.iter().any(|kw| token == kw))
+    {
+        return Some(DiagnosticKind::Imaging);
+    }
+
+    None
+}
+
+fn observation_category_matches(resource: &Value, keyword: &str) -> bool {
+    let Some(categories) = resource.get("category").and_then(Value::as_array) else {
+        return false;
+    };
+
+    let needle = keyword.to_lowercase();
+
+    categories.iter().any(|entry| {
+        if let Some(text) = entry.get("text").and_then(Value::as_str) {
+            if text.to_lowercase().contains(&needle) {
+                return true;
+            }
+        }
+
+        if let Some(codings) = entry.get("coding").and_then(Value::as_array) {
+            for coding in codings {
+                if let Some(code_text) = coding.get("display").and_then(Value::as_str) {
+                    if code_text.to_lowercase().contains(&needle) {
+                        return true;
+                    }
+                }
+                if let Some(code_text) = coding.get("code").and_then(Value::as_str) {
+                    if code_text.to_lowercase().contains(&needle) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
+    })
+}
+
+fn tokenize(text: &str) -> Vec<String> {
+    text.to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|part| !part.is_empty())
+        .map(|part| part.to_string())
+        .collect()
+}
+
+const LAB_KEYWORDS: [&str; 12] = [
+    "lactate",
+    "troponin",
+    "glucose",
+    "creatinine",
+    "cbc",
+    "platelet",
+    "wbc",
+    "culture",
+    "bilirubin",
+    "sodium",
+    "potassium",
+    "magnesium",
+];
+
+const IMAGING_KEYWORDS: [&str; 6] = ["ct", "cta", "mri", "xray", "ultrasound", "radiograph"];
 
 fn is_recent_vital(
     anchor: Option<DateTime<Utc>>,
